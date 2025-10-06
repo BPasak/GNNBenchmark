@@ -1,5 +1,5 @@
 import os
-from typing import List, Literal, Tuple
+from typing import Callable, List, Literal, Tuple, Union
 
 import numpy as np
 import torch
@@ -11,7 +11,12 @@ from src.Datasets.base import Dataset
 
 class NCars(Dataset):
 
-    def __init__(self, *, root, transform = None, pre_transform = None, pre_filter = None):
+    def __init__(
+        self, *, root: Union[str, os.PathLike],
+        transform: Callable[[torch_geometric.data.Data], torch_geometric.data.Data] = None,
+        pre_transform: Callable[[torch_geometric.data.Data], torch_geometric.data.Data] = None,
+        pre_filter: Callable[[torch_geometric.data.Data], bool] = None
+    ):
         super().__init__(
             root = root,
             transform = transform,
@@ -44,6 +49,8 @@ class NCars(Dataset):
                 is_car = is_car
             )
 
+            # TODO Apply pre-filter and pre-transform
+
             torch.save(data, processed_sequence_path)
 
     def process(self, modes: List[Literal["training", "validation", "test"]] | None = None) -> None:
@@ -63,7 +70,7 @@ class NCars(Dataset):
     def get_mode_data(self, mode: Literal["training", "validation", "test"], idx: int) -> torch_geometric.data.Data:
         processed_dir = os.path.join(self.root, 'processed', mode)
         file_name = os.listdir(processed_dir)[idx]
-        return torch.load(os.path.join(processed_dir, file_name), weights_only = False)
+        return torch.load(os.path.join(processed_dir, file_name), weights_only = False) # TODO Apply transform
 
     def __getitem__(self, idx: Tuple[Literal["training", "validation", "test"], int]) -> torch_geometric.data.Data:
         return self.get_mode_data(*idx)

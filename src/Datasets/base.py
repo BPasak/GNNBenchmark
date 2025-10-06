@@ -1,5 +1,6 @@
 import abc
-from typing import List, Literal, Tuple
+from os import PathLike
+from typing import Callable, List, Literal, Tuple, Union
 
 import torch_geometric.data
 
@@ -8,10 +9,10 @@ import torch_geometric.data
 class Dataset(abc.ABC):
 
     def __init__(
-        self, *, root,
-        transform=None,
-        pre_transform=None,
-        pre_filter=None
+        self, *, root: Union[str, PathLike],
+        transform: Callable[[torch_geometric.data.Data], torch_geometric.data.Data] = None,
+        pre_transform: Callable[[torch_geometric.data.Data], torch_geometric.data.Data] = None,
+        pre_filter: Callable[[torch_geometric.data.Data], bool] = None
     ):
         self.root = root
         self.transform = transform
