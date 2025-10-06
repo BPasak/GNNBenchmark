@@ -49,7 +49,11 @@ class NCars(Dataset):
                 is_car = is_car
             )
 
-            # TODO Apply pre-filter and pre-transform
+            if self.pre_filter and not self.pre_filter(data):
+                continue
+
+            if self.pre_transform:
+                data = self.pre_transform(data)
 
             torch.save(data, processed_sequence_path)
 
@@ -70,7 +74,9 @@ class NCars(Dataset):
     def get_mode_data(self, mode: Literal["training", "validation", "test"], idx: int) -> torch_geometric.data.Data:
         processed_dir = os.path.join(self.root, 'processed', mode)
         file_name = os.listdir(processed_dir)[idx]
-        return torch.load(os.path.join(processed_dir, file_name), weights_only = False) # TODO Apply transform
+        data = torch.load(os.path.join(processed_dir, file_name), weights_only = False)
+
+        return self.transform(data) if self.transform else data
 
     def __getitem__(self, idx: Tuple[Literal["training", "validation", "test"], int]) -> torch_geometric.data.Data:
         return self.get_mode_data(*idx)
