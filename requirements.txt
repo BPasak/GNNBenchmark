@@ -1,0 +1,8 @@
+numpy
+torch
+torch-geometric
+
+tqdm
+notebook
+jupyterlab
+ipywidgets
