@@ -9,7 +9,7 @@ from torch_geometric.typing import Adj
 from torch_scatter import scatter_max, scatter_sum
 from typing import List
 
-from aegnn.models.layer import MaxPooling
+from .layer import MaxPooling
 from .base.base import add_async_graph, async_context
 from .base.utils import compute_edges, graph_new_nodes, graph_changed_nodes
 from .flops import compute_flops_voxel_grid

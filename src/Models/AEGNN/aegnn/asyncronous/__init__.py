@@ -3,16 +3,16 @@ import logging
 import torch.nn
 import torch_geometric
 from torch_geometric.nn.norm import BatchNorm
-from aegnn.models.layer import MaxPooling
+from .layer import MaxPooling
 
-from asyncronous.conv import make_conv_asynchronous
-from asyncronous.batch_norm import make_batch_norm_asynchronous
-from asyncronous.linear import make_linear_asynchronous
-from asyncronous.max_pool import make_max_pool_asynchronous
+from .conv import make_conv_asynchronous
+from .batch_norm import make_batch_norm_asynchronous
+from .linear import make_linear_asynchronous
+from .max_pool import make_max_pool_asynchronous
 
-from asyncronous.flops import compute_flops_from_module
-from asyncronous.runtime import compute_runtime_from_module
-from asyncronous.base.callbacks import CallbackFactory
+from .flops import compute_flops_from_module
+from .runtime import compute_runtime_from_module
+from .base.callbacks import CallbackFactory
 
 
 def make_model_asynchronous(module, r: float, grid_size=None, edge_attributes=None,
