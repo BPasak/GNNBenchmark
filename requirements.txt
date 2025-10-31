@@ -6,3 +6,8 @@ tqdm
 notebook
 jupyterlab
 ipywidgets
+
+pycocotools
+omegaconf
+torchvision
+scipy
