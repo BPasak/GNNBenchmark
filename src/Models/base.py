@@ -13,3 +13,7 @@ class BaseModel(torch.nn.Module, abc.ABC):
     @abc.abstractmethod
     def forward(self, x: torch_geometric.data.Data) -> torch.Tensor:
         pass
+
+    @abc.abstractmethod
+    def data_transform(self, x: torch_geometric.data.Data) -> torch_geometric.data.Data:
+        pass
