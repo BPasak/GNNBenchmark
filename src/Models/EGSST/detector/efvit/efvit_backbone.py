@@ -12,7 +12,7 @@ import torch
 import torch.nn as nn
 from inspect import signature
 
-from datasets.detector.efvit.nn import (
+from .nn import (
     ConvLayer,
     DSConv,
     EfficientViTBlock,

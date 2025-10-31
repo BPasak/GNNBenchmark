@@ -9,7 +9,7 @@ import torch.distributed
 
 from typing import Union, List
 
-from datasets.detector.efvit.utils.list import list_mean, list_sum
+from .list import list_mean, list_sum
 
 __all__ = [
     "dist_init",

@@ -16,7 +16,7 @@ from pycocotools.cocoeval import COCOeval
 from pycocotools.coco import COCO
 import pycocotools.mask as mask_util
 
-import datasets.detector.rtdetr_head.rtdetr_dist as dist
+import rtdetr_dist as dist
 
 
 __all__ = ['CocoEvaluator',]

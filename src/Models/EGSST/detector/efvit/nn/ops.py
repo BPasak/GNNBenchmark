@@ -13,9 +13,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.cuda.amp import autocast
 
-from datasets.detector.efvit.nn.act import build_act
-from datasets.detector.efvit.nn.norm import build_norm
-from datasets.detector.efvit.utils import get_same_padding, list_sum, resize, val2list, val2tuple
+from .act import build_act
+from .norm import build_norm
+from ..utils import get_same_padding, list_sum, resize, val2list, val2tuple
 
 __all__ = [
     "ConvLayer",

@@ -8,13 +8,13 @@ import math
 
 from omegaconf import OmegaConf
 
-from datasets.detector.rtdetr_head.rtdetr_converter import convert_yolo_batch_to_targets_format, move_to_device, to_feats_list, convert_yolo_batch_to_coco_format
-from datasets.detector.rtdetr_head.rtdetr_hybrid_encoder import HybridEncoder
-from datasets.detector.rtdetr_head.rtdetr_decoder import RTDETRTransformer
-from datasets.detector.rtdetr_head.rtdetr_matcher import HungarianMatcher
-from datasets.detector.rtdetr_head.rtdetr_criterion import SetCriterion
-from datasets.detector.rtdetr_head.rtdetr_postprocessor import RTDETRPostProcessor
-from datasets.detector.rtdetr_head.rtdetr_coco_eval import CocoEvaluator
+from .rtdetr_head.rtdetr_converter import convert_yolo_batch_to_targets_format, move_to_device, to_feats_list, convert_yolo_batch_to_coco_format
+from .rtdetr_head.rtdetr_hybrid_encoder import HybridEncoder
+from .rtdetr_head.rtdetr_decoder import RTDETRTransformer
+from .rtdetr_head.rtdetr_matcher import HungarianMatcher
+from .rtdetr_head.rtdetr_criterion import SetCriterion
+from .rtdetr_head.rtdetr_postprocessor import RTDETRPostProcessor
+from .rtdetr_head.rtdetr_coco_eval import CocoEvaluator
 
 
 class RTDETRHead(nn.Module):

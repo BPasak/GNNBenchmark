@@ -6,7 +6,7 @@ import torch
 
 from typing import Union
 
-from datasets.detector.efvit.utils.apps_dist import sync_tensor
+from .apps_dist import sync_tensor
 
 __all__ = ["AverageMeter"]
 

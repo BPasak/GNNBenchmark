@@ -7,7 +7,7 @@ from typing import Union
 
 import torch.nn as nn
 
-from datasets.detector.efvit.utils import build_kwargs_from_config
+from ..utils import build_kwargs_from_config
 
 __all__ = ["build_act"]
 
