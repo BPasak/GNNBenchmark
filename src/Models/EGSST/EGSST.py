@@ -1,9 +1,16 @@
+from typing import Any, Optional
+import numpy as np
+from torch_geometric.data import Data as PyGData
+
 import torch
 import torch_geometric
 
 from External.EGSST_PAPER.detector.efvit.efvit_backbone import EfficientViTLargeBackbone
 from Models.base import BaseModel
 from Models.EGSST.Components import EnchancedCNN
+
+
+from Models.EGSST.transform import events_to_graph, TransformConfig
 
 
 class EGSST(BaseModel):
@@ -49,5 +56,54 @@ class EGSST(BaseModel):
         x = self.MSLViT(x)
         return self.detection_head(x)
 
-    def data_transform(self, x: torch_geometric.data.Data) -> torch_geometric.data.Data:
-        pass # TODO: Implement Data Transform
+    def data_transform(
+    self,
+    x: Any,
+    cfg: Optional[TransformConfig] = None,
+    label: Optional[int] = None
+) -> PyGData:
+    """
+    Convert raw events -> torch_geometric.data.Data suitable for forward().
+    Accepts:
+      - PyG Data: returned as-is
+      - numpy.ndarray or torch.Tensor with shape [N,4] (events [x,y,t,p])
+      - dict with keys {'events', optional 'label'}
+    """
+    if isinstance(x, PyGData):
+        return x
+
+
+    if isinstance(x, dict):
+        if 'events' not in x:
+            raise ValueError("Dict input to data_transform must contain 'events' with an [N,4] array/tensor.")
+        events = x['events']
+        if label is None and 'label' in x:
+            label = x['label']
+    else:
+        events = x
+
+    # Validate shape
+    if not (hasattr(events, 'shape') and len(events.shape) == 2 and events.shape[1] == 4):
+        raise ValueError(f"Events must have shape [N,4], got {getattr(events, 'shape', None)}")
+
+    # Build default config if none provided
+    if cfg is None:
+        # get model device robustly: 'cpu' or 'cuda'
+        try:
+            dev_str = str(next(self.parameters()).device)
+            dev = 'cuda' if dev_str.startswith('cuda') else 'cpu'
+        except StopIteration:
+            dev = 'cpu'  # no parameters yet
+        cfg = TransformConfig(
+            beta=1000.0,          # scale seconds -> ms
+            radius=10.0,          # tune per dataset
+            min_nodes_subgraph=1, # raise to 8–16 after sanity checks
+            max_num_neighbors=64,
+            device=dev,
+            ensure_undirected=True
+        )
+
+
+    graph = events_to_graph(events, cfg, label=label)
+    return graph
+
