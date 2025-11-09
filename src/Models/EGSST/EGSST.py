@@ -1,6 +1,8 @@
 import torch
 import torch_geometric
+from torch import Tensor
 from torch_geometric.data import Data
+from torch_geometric.nn import GCNConv
 
 from External.EGSST_PAPER.detector.efvit.efvit_backbone import EfficientViTLargeBackbone
 from Models.base import BaseModel
@@ -12,27 +14,37 @@ class EGSST(BaseModel):
 
     def __init__(
         self, *,
+        gcn_count: int,
         target_size: tuple[int, int],
+        time_steps: int = 1,
         detection_head_config: str,
         YOLOX: bool = False,
         Ecnn_flag: bool = False,
         ti_flag: bool = False,
     ):
         super().__init__()
+        self.gcn_count: int = gcn_count
+        self.target_size: tuple[int, int] = target_size
+
         self.detection_head_config: str = detection_head_config
         self.YOLOX: bool = YOLOX
         self.Ecnn_flag: bool = Ecnn_flag
         self.ti_flag: bool = ti_flag
-        # TODO: Load common components
+
+        self.GCNs = torch.nn.ModuleList()
+        self.GCNs.append(GCNConv(4, 32))
+        for _ in range(self.gcn_count):
+            self.GCNs.append(GCNConv(32, 32))
 
         self.ECNN = None
         if self.Ecnn_flag:
             self.ECNN = EnchancedCNN(channels=32, target_size=target_size)
 
         self.MSLViT: EfficientViTLargeBackbone = EfficientViTLargeBackbone(
-            width_list=[32, 64, 64, 128, 256],
+            width_list=[64, 128, 128, 256, 256],
             depth_list=[1, 1, 0, 1, 1],
             ti_flag=self.ti_flag,
+            time_steps = time_steps
         )
 
         # self.detection_head = None
@@ -45,11 +57,25 @@ class EGSST(BaseModel):
         #         detection_head_config
         #     )
 
+    def __wrap_into_dense(self, xy: torch.Tensor, features: torch.Tensor, target_size: tuple[int, int]) -> torch.Tensor:
+        dense = torch.zeros([32, *target_size])
+        dense[:, xy[:, 1], xy[:, 0]] = features.T # TODO: Implement feature aggregation
+        return dense
+
     def forward(self, x: Data) -> torch.Tensor:
+        out = torch.cat([x.pos, x.x], dim=1)
+
+        for gcn in self.GCNs:
+            out = gcn(out, x.edge_index)
+
+        dense = self.__wrap_into_dense(x.pos[:, :2].int(), out, self.target_size)
+        dense = dense[None, :, :, :] # TODO: Adjust to accept batches
+
         if self.Ecnn_flag:
-            x = self.ECNN(x)
-        x = self.MSLViT(x)
-        return self.detection_head(x)
+            dense = self.ECNN(dense)
+
+        out = self.MSLViT(dense)
+        return self.detection_head(out)
 
     def data_transform(
         self,
