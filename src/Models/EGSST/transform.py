@@ -59,9 +59,8 @@ def radius_graph_pytorch(pos: Tensor, radius: float, allow_self_loops: bool = Fa
     xT = x.permute([2, 1, 0])
     dis2 = (xT - x).pow(2).sum(1)
     mask = dis2 <= radius2
-
-    if not allow_self_loops:
-        mask = mask & (dis2 > 0)
+    
+    mask = torch.triu(mask, diagonal=1)
 
     edge_index = mask.nonzero(as_tuple=False).t().contiguous()
 
