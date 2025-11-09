@@ -60,23 +60,15 @@ class NCaltech(Dataset):
         return label_dict.get(label, None)
 
 
-    def processAnnotationBin(self, path, folder):
+    def processAnnotationBin(self, path):
 
-        with open(path, "rb") as f:
-        # --- box_contour ---
-            rows = struct.unpack('h', f.read(2))[0]  # int16
-            cols = struct.unpack('h', f.read(2))[0]
-            box_contour = np.frombuffer(f.read(rows * cols * 2), dtype=np.int16)
-            box_contour = box_contour.reshape((rows, cols))
-            
-            # --- obj_contour ---
-            rows = struct.unpack('h', f.read(2))[0]
-            cols = struct.unpack('h', f.read(2))[0]
-            obj_contour = np.frombuffer(f.read(rows * cols * 2), dtype=np.int16)
-            obj_contour = obj_contour.reshape((rows, cols))
-            instanceClass = folder
+        parsed_file = np.fromfile(path, dtype=np.int16)
+        bbox_point_count = parsed_file[1]
 
-        return instanceClass, box_contour, obj_contour
+        bbox = parsed_file[2:2*bbox_point_count+2].reshape(-1, 2)
+        obj_contour = parsed_file[2*bbox_point_count+4:].reshape(-1, 2)
+
+        return bbox, obj_contour
 
 
     def __process_mode__(self, mode: Literal["training", "validation", "test"]) -> None:
@@ -121,12 +113,12 @@ class NCaltech(Dataset):
                 x, pos = events[:, -1:], events[:, :3]  # polarity as feature, xyz/time as pos
 
                 # --- Process annotation bin ---
-                instanceClass, box_contour, obj_contour = self.processAnnotationBin(anno_path, folder_name)
+                bbox, obj_contour = self.processAnnotationBin(anno_path)
                
                 # --- Create Data object ---
-                data = torch_geometric.data.Data(x=x, pos=pos, item_class=instanceClass)
-                data.box = torch.from_numpy(box_contour).float()  
-                data.obj = torch.from_numpy(obj_contour).float()  
+                data = torch_geometric.data.Data(x=x, pos=pos, label=folder_name)
+                data.bbox = bbox
+                data.obj_contour = obj_contour
                 
                 if self.pre_filter and not self.pre_filter(data):
                     continue
