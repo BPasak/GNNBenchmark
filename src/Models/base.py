@@ -15,5 +15,14 @@ class BaseModel(torch.nn.Module, abc.ABC):
         pass
 
     @abc.abstractmethod
-    def data_transform(self, x: torch_geometric.data.Data) -> torch_geometric.data.Data:
+    def data_transform(self, x: torch_geometric.data.Data, **kwargs) -> torch_geometric.data.Data:
+        pass
+
+    @abc.abstractmethod
+    def graph_update(
+        self,
+        x: torch_geometric.data.Data,
+        event: tuple[float, float, float, float],
+        **kwargs
+    ) -> torch_geometric.data.Data:
         pass
