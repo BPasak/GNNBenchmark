@@ -9,46 +9,10 @@ import numpy as np
 import torch
 from torch import Tensor
 from torch_geometric.data import Data
+import networkx
 
-# PyG version compatibility handling
-try:
-    # PyG >= 2.0.0
-    from torch_geometric.utils import connected_components
-except ImportError:
-    try:
-        # PyG < 2.0.0  
-        from torch_geometric.utils import dense_components as connected_components
-    except ImportError:
-        # Fallback: implement our own simple connected components
-        def connected_components(edge_index, num_nodes=None):
-            from torch_geometric.utils import to_dense_adj
-            if num_nodes is None:
-                num_nodes = int(edge_index.max()) + 1
-            adj = to_dense_adj(edge_index, max_num_nodes=num_nodes)[0]
-            visited = torch.zeros(num_nodes, dtype=torch.bool)
-            components = torch.zeros(num_nodes, dtype=torch.long)
-            comp_id = 0
-            
-            for i in range(num_nodes):
-                if not visited[i]:
-                    # BFS from node i
-                    queue = [i]
-                    visited[i] = True
-                    components[i] = comp_id
-                    
-                    while queue:
-                        current = queue.pop(0)
-                        for j in range(num_nodes):
-                            if adj[current, j] > 0 and not visited[j]:
-                                visited[j] = True
-                                components[j] = comp_id
-                                queue.append(j)
-                    
-                    comp_id += 1
-            
-            return components
 
-def radius_graph_pytorch(pos: Tensor, radius: float, allow_self_loops: bool = False) -> Tensor:
+def radius_graph_pytorch(pos: Tensor, radius: float) -> Tensor:
     """
     Build radius graph using pure PyTorch - no torch-cluster required
     """
@@ -130,41 +94,17 @@ def to_pyg_data(node_feats: Tensor, edge_index: Tensor, y: Optional[Tensor] = No
         data.y = y
     return data
 
-def filter_connected_subgraphs(data: Data, min_nodes: int) -> Tuple[Data, Tensor]:
+def filter_connected_subgraphs(data: Data, min_nodes: int) -> Data:
     """
     EGSST §3.2: Keep only nodes belonging to connected components of size >= min_nodes
     """
-    # Compute connected components
-    comp_id = connected_components(data.edge_index, num_nodes=data.num_nodes)
+    edge_list = data.edge_index.cpu().numpy().T
+    graph = networkx.Graph(list(edge_list))
+    components = networkx.connected_components(graph)
+    retained_vertices = [list(component) for component in components if len(component) >= min_nodes]
+    retained_vertices = np.concatenate(retained_vertices)
     
-    # Count component sizes
-    sizes = torch.bincount(comp_id, minlength=int(comp_id.max().item()) + 1)
-    
-    # Keep only components with sufficient nodes
-    keep_mask = sizes[comp_id] >= min_nodes
-    keep_idx = torch.nonzero(keep_mask, as_tuple=True)[0]
-
-    if keep_idx.numel() == 0:
-        print(f"Warning: All components filtered out (min_nodes={min_nodes}). Returning original graph.")
-        return data, comp_id
-
-    # Remap node indices for filtered graph
-    new_index = -torch.ones(data.num_nodes, dtype=torch.long, device=data.x.device)
-    new_index[keep_idx] = torch.arange(keep_idx.numel(), device=data.x.device)
-
-    # Filter edges
-    ei = data.edge_index
-    src, dst = ei[0], ei[1]
-    e_keep = keep_mask[src] & keep_mask[dst]
-    ei_f = ei[:, e_keep]
-    ei_f = new_index[ei_f]
-
-    # Create filtered data
-    data_f = Data(x=data.x[keep_idx], edge_index=ei_f)
-    if hasattr(data, "y"):
-        data_f.y = data.y
-    
-    return data_f, comp_id[keep_idx]
+    return data.subgraph(torch.Tensor(retained_vertices).int())
 
 def events_to_graph(
     events_xyttp: Union[np.ndarray, Tensor],
