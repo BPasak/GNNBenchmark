@@ -1,16 +1,11 @@
-from typing import Any, Optional
-import numpy as np
-from torch_geometric.data import Data as PyGData
-
 import torch
 import torch_geometric
+from torch_geometric.data import Data
 
 from External.EGSST_PAPER.detector.efvit.efvit_backbone import EfficientViTLargeBackbone
 from Models.base import BaseModel
 from Models.EGSST.Components import EnchancedCNN
-
-
-from Models.EGSST.transform import events_to_graph, TransformConfig
+from Models.EGSST.transform import filter_connected_subgraphs, normalize_time, radius_graph_pytorch
 
 
 class EGSST(BaseModel):
@@ -40,70 +35,48 @@ class EGSST(BaseModel):
             ti_flag=self.ti_flag,
         )
 
-        self.detection_head = None
-        if self.YOLOX:
-            # TODO: FIND EXTERNAL IMPLEMENTATION
-            raise NotImplementedError
-        else:
-            from External.EGSST_PAPER.detector import RTDETRHead
-            self.detection_head = RTDETRHead(
-                detection_head_config
-            )
+        # self.detection_head = None
+        # if self.YOLOX:
+        #     # TODO: FIND EXTERNAL IMPLEMENTATION
+        #     raise NotImplementedError
+        # else:
+        #     from External.EGSST_PAPER.detector.rtdetr_header import RTDETRHead
+        #     self.detection_head = RTDETRHead(
+        #         detection_head_config
+        #     )
 
-    def forward(self, x: torch_geometric.data.Data) -> torch.Tensor:
+    def forward(self, x: Data) -> torch.Tensor:
         if self.Ecnn_flag:
             x = self.ECNN(x)
         x = self.MSLViT(x)
         return self.detection_head(x)
 
     def data_transform(
-    self,
-    x: Any,
-    cfg: Optional[TransformConfig] = None,
-    label: Optional[int] = None
-) -> PyGData:
-    """
-    Convert raw events -> torch_geometric.data.Data suitable for forward().
-    Accepts:
-      - PyG Data: returned as-is
-      - numpy.ndarray or torch.Tensor with shape [N,4] (events [x,y,t,p])
-      - dict with keys {'events', optional 'label'}
-    """
-    if isinstance(x, PyGData):
-        return x
+        self,
+        x: Data,
+        beta: float = 0.00001,
+        radius: float = 5,
+        min_nodes_subgraph: int = 100,
+    ) -> Data:
+        """
+        Convert raw events in the format of torch_geometric.data.Data -> torch_geometric.data.Data suitable for forward().
+        Accepts:
+          - torch_geometric.data.Data
+        """
 
+        transformed: Data = x.clone()
+        transformed.pos[:, 2] = normalize_time(transformed.pos[:, 2], beta=beta)
+        edges = radius_graph_pytorch(transformed.pos, radius)
+        transformed.edge_index = edges
 
-    if isinstance(x, dict):
-        if 'events' not in x:
-            raise ValueError("Dict input to data_transform must contain 'events' with an [N,4] array/tensor.")
-        events = x['events']
-        if label is None and 'label' in x:
-            label = x['label']
-    else:
-        events = x
+        transformed = filter_connected_subgraphs(transformed, min_nodes = min_nodes_subgraph)
 
-    # Validate shape
-    if not (hasattr(events, 'shape') and len(events.shape) == 2 and events.shape[1] == 4):
-        raise ValueError(f"Events must have shape [N,4], got {getattr(events, 'shape', None)}")
+        return transformed
 
-    # Build default config if none provided
-    if cfg is None:
-        # get model device robustly: 'cpu' or 'cuda'
-        try:
-            dev_str = str(next(self.parameters()).device)
-            dev = 'cuda' if dev_str.startswith('cuda') else 'cpu'
-        except StopIteration:
-            dev = 'cpu'  # no parameters yet
-        cfg = TransformConfig(
-            beta=1000.0,          # scale seconds -> ms
-            radius=10.0,          # tune per dataset
-            min_nodes_subgraph=1, # raise to 8–16 after sanity checks
-            max_num_neighbors=64,
-            device=dev,
-            ensure_undirected=True
-        )
-
-
-    graph = events_to_graph(events, cfg, label=label)
-    return graph
-
+    def graph_update(
+        self,
+        x: torch_geometric.data.Data,
+        event: tuple[float, float, float, float],
+        **kwargs
+    ) -> torch_geometric.data.Data:
+        raise NotImplementedError
