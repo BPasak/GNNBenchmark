@@ -7,7 +7,7 @@ import torch.nn as nn
 from torch.nn.modules.batchnorm import _BatchNorm
 from typing import Union
 
-from ..utils import build_kwargs_from_config
+from ..utils.network import build_kwargs_from_config
 
 __all__ = ["LayerNorm2d", "build_norm", "reset_bn", "set_norm_eps"]
 

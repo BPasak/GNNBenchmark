@@ -15,7 +15,8 @@ from torch.cuda.amp import autocast
 
 from .act import build_act
 from .norm import build_norm
-from ..utils import get_same_padding, list_sum, resize, val2list, val2tuple
+from ..utils.network import get_same_padding, resize
+from ..utils.list import list_sum, val2list, val2tuple
 
 __all__ = [
     "ConvLayer",
