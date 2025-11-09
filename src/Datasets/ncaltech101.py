@@ -37,13 +37,16 @@ class NCaltech(Dataset):
             raise ValueError(f"File size {instance.size} not divisible by 5.")
         ev = instance.reshape(-1, 5)
 
-        x  = ev[:, 0].astype(np.int32)
-        y  = ev[:, 1].astype(np.int32)
+        x  = ev[:, 0].astype(np.uint8)
+        y  = ev[:, 1].astype(np.uint8)
         b3 = ev[:, 2].astype(np.uint32)
         b4 = ev[:, 3].astype(np.uint32)
         b5 = ev[:, 4].astype(np.uint32)
 
-        p = (b3 >> 7).astype(np.uint8)  
+        p = (b3 >> 7).astype(np.int8)
+
+        # Standardizing polarity to values -1 and 1
+        p = np.where(p == 0, -1, p)
 
         ts = ((b3 & 0x7F) << 16) | (b4 << 8) | b5  
 
