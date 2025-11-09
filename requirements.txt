@@ -12,3 +12,4 @@ omegaconf
 torchvision
 scipy
 torchpack
+networkx
