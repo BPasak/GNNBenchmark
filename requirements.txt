@@ -11,3 +11,4 @@ pycocotools
 omegaconf
 torchvision
 scipy
+torchpack
