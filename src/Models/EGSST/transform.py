@@ -48,34 +48,23 @@ except ImportError:
             
             return components
 
-def radius_graph_pytorch(pos: Tensor, radius: float, max_num_neighbors: int = 64) -> Tensor:
+def radius_graph_pytorch(pos: Tensor, radius: float, allow_self_loops: bool = False) -> Tensor:
     """
     Build radius graph using pure PyTorch - no torch-cluster required
     """
-    n_nodes = pos.shape[0]
-    edges = []
-    
-    # Compute pairwise distances
-    for i in range(n_nodes):
-        distances = torch.norm(pos - pos[i], dim=1)  # Euclidean distance
-        # Find neighbors within radius (excluding self)
-        neighbors = torch.where((distances <= radius) & (distances > 0))[0]
-        
-        # Limit to max_num_neighbors
-        if len(neighbors) > max_num_neighbors:
-            # Keep the closest neighbors
-            neighbor_distances = distances[neighbors]
-            _, closest_indices = torch.topk(neighbor_distances, max_num_neighbors, largest=False)
-            neighbors = neighbors[closest_indices]
-        
-        # Add edges
-        for j in neighbors:
-            edges.append([i, j])
-    
-    if len(edges) == 0:
-        return torch.empty((2, 0), dtype=torch.long, device=pos.device)
-    
-    edge_index = torch.tensor(edges, dtype=torch.long, device=pos.device).t()
+
+    radius2 = radius * radius
+
+    x = pos[:, :, None]
+    xT = x.permute([2, 1, 0])
+    dis2 = (xT - x).pow(2).sum(1)
+    mask = dis2 <= radius2
+
+    if not allow_self_loops:
+        mask = mask & (dis2 > 0)
+
+    edge_index = mask.nonzero(as_tuple=False).t().contiguous()
+
     return edge_index
 
 @dataclass
