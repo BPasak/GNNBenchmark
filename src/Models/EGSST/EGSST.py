@@ -41,28 +41,28 @@ class EGSST(BaseModel):
             self.ECNN = EnchancedCNN(channels=32, target_size=target_size)
 
         self.MSLViT: EfficientViTLargeBackbone = EfficientViTLargeBackbone(
-            width_list=[64, 128, 128, 256, 256],
+            width_list=[32, 64, 64, 128, 256],
             depth_list=[1, 1, 0, 1, 1],
             ti_flag=self.ti_flag,
             time_steps = time_steps
         )
 
-        # self.detection_head = None
-        # if self.YOLOX:
-        #     # TODO: FIND EXTERNAL IMPLEMENTATION
-        #     raise NotImplementedError
-        # else:
-        #     from External.EGSST_PAPER.detector.rtdetr_header import RTDETRHead
-        #     self.detection_head = RTDETRHead(
-        #         detection_head_config
-        #     )
+        self.detection_head = None
+        if self.YOLOX:
+            # TODO: FIND EXTERNAL IMPLEMENTATION
+            raise NotImplementedError
+        else:
+            from External.EGSST_PAPER.detector.rtdetr_header import RTDETRHead
+            self.detection_head = RTDETRHead(
+                detection_head_config
+            )
 
     def __wrap_into_dense(self, xy: torch.Tensor, features: torch.Tensor, target_size: tuple[int, int]) -> torch.Tensor:
         dense = torch.zeros([32, *target_size])
         dense[:, xy[:, 1], xy[:, 0]] = features.T # TODO: Implement feature aggregation
         return dense
 
-    def forward(self, x: Data) -> torch.Tensor:
+    def forward(self, x: Data, **kwargs) -> torch.Tensor:
         out = torch.cat([x.pos, x.x], dim=1)
 
         for gcn in self.GCNs:
@@ -75,7 +75,7 @@ class EGSST(BaseModel):
             dense = self.ECNN(dense)
 
         out = self.MSLViT(dense)
-        return self.detection_head(out)
+        return self.detection_head(out, targets=kwargs.get("targets", None))
 
     def data_transform(
         self,

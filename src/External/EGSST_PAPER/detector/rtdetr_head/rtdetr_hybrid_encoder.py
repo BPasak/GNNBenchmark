@@ -18,7 +18,7 @@ from .rtdetr_utils import get_activation
 
 class HybridEncoder(nn.Module):
     def __init__(self,
-                 in_channels=[512, 1024, 2048], # [64, 120, 256],
+                 in_channels=[64, 128, 256],
                  feat_strides=[8, 16, 32],
                  hidden_dim=256,
                  nhead=8,
@@ -154,7 +154,7 @@ class HybridEncoder(nn.Module):
             feat_heigh = self.lateral_convs[len(self.in_channels) - 1 - idx](feat_heigh) # [8, 256, 18, 18], [8, 256, 36, 36]
             # print("feat_heigh.shape: ", feat_heigh.shape)
             inner_outs[0] = feat_heigh
-            upsample_feat = F.interpolate(feat_heigh, scale_factor=2., mode='nearest')
+            upsample_feat = F.interpolate(feat_heigh, size = feat_low.shape[-2:], mode='nearest')
             inner_out = self.fpn_blocks[len(self.in_channels)-1-idx](torch.concat([upsample_feat, feat_low], dim=1))
             inner_outs.insert(0, inner_out) # [8, 256, 72, 72], [8, 256, 36, 36], [8, 256, 18, 18]
             # print("***********************************")

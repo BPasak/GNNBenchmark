@@ -20,7 +20,7 @@ class RTDETRTransformer(nn.Module):
                  hidden_dim=256,
                  num_queries=300,
                  position_embed_type='sine',
-                 feat_channels=[512, 1024, 2048],
+                 feat_channels=[256, 256, 256],
                  feat_strides=[8, 16, 32],
                  num_levels=3,
                  num_decoder_points=4,

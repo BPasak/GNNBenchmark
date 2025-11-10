@@ -11,7 +11,7 @@ class BaseModel(torch.nn.Module, abc.ABC):
         super().__init__()
 
     @abc.abstractmethod
-    def forward(self, x: torch_geometric.data.Data) -> torch.Tensor:
+    def forward(self, x: torch_geometric.data.Data, **kwargs) -> torch.Tensor:
         pass
 
     @abc.abstractmethod

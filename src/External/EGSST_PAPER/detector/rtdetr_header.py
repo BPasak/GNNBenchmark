@@ -8,6 +8,7 @@ import math
 
 from omegaconf import OmegaConf
 
+from Datasets.ncaltech101 import NCaltech
 from .rtdetr_head.rtdetr_converter import convert_yolo_batch_to_targets_format, move_to_device, to_feats_list, convert_yolo_batch_to_coco_format
 from .rtdetr_head.rtdetr_hybrid_encoder import HybridEncoder
 from .rtdetr_head.rtdetr_decoder import RTDETRTransformer
@@ -23,12 +24,12 @@ class RTDETRHead(nn.Module):
         self.cfg = OmegaConf.load(yaml_file_path)
         self.dataset_name = self.cfg.dataset.current_dataset
         cfg_rtdetr = self.cfg.rtdetr
-        cfg_enc_dec_uniform = cfg_rtdetr.uniform
-        cfg_hybrid_encoder = cfg_rtdetr.hybrid_encoder
-        cfg_decoder = cfg_rtdetr.decoder
-        cfg_matcher = cfg_rtdetr.matcher
-        cfg_criterion = cfg_rtdetr.criterion
-        cfg_postprocess = cfg_rtdetr.postprocess
+        cfg_enc_dec_uniform = cfg_rtdetr.uniform if cfg_rtdetr.uniform is not None else {}
+        cfg_hybrid_encoder = cfg_rtdetr.hybrid_encoder if cfg_rtdetr.hybrid_encoder is not None else {}
+        cfg_decoder = cfg_rtdetr.decoder if cfg_rtdetr.decoder is not None else {}
+        cfg_matcher = cfg_rtdetr.matcher if cfg_rtdetr.matcher is not None else {}
+        cfg_criterion = cfg_rtdetr.criterion if cfg_rtdetr.criterion is not None else {}
+        cfg_postprocess = cfg_rtdetr.postprocess if cfg_rtdetr.postprocess is not None else {}
 
         self.encoder = HybridEncoder(**cfg_enc_dec_uniform, **cfg_hybrid_encoder)
         self.decoder = RTDETRTransformer(**cfg_enc_dec_uniform, **cfg_decoder)
@@ -105,8 +106,12 @@ class RTDETRHead(nn.Module):
         return out_dict
 
     def forward(self, feats_dict, targets=None):
-        scale_img_width = 240 if self.dataset_name=='gen1' else 720
-        img_height = 240 if self.dataset_name=='gen1' else 720
+        if self.dataset_name == "ncaltech":
+            dataset_info = NCaltech.get_info()
+        else:
+            raise ValueError
+
+        scale_img_width, img_height = dataset_info['image size']
 
         feats_list = to_feats_list(feats_dict)
         target_format_lbl = convert_yolo_batch_to_targets_format(targets, img_width=scale_img_width, img_height=img_height)
