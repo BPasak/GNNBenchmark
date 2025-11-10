@@ -20,6 +20,7 @@ def sub_sampling(data: Data, n_samples: int = 10000, sub_sample: bool = True) ->
     N = data.num_nodes
     if not sub_sample or N <= n_samples:
         return data
+
     idx = torch.linspace(0, N - 1, steps=n_samples).round().long()
     data.x   = data.x[idx]
     data.pos = data.pos[idx]
@@ -30,7 +31,7 @@ def sub_sampling(data: Data, n_samples: int = 10000, sub_sample: bool = True) ->
 
 class NCarsEventsGraphDataset1(InMemoryDataset):
     """
-    AEGNN-faithful NCars preprocessing:
+    AEGNN NCars preprocessing:
       - x: polarity only (N,1)
       - pos: (x, y, t_norm) (N,3), with t min-max normalized
       - subsample to n_samples (default 10000)
@@ -45,7 +46,7 @@ class NCarsEventsGraphDataset1(InMemoryDataset):
     def __init__(
         self,
         split_dir: str,
-        max_events: Optional[int] = None,        # optional hard cap before subsampling
+        max_events: Optional[int] = None,
         cache: bool = False,
         # AEGNN hyperparams:
         r: float = 3.0,
