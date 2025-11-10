@@ -37,3 +37,7 @@ class Dataset(abc.ABC):
 
     def __getitem__(self, idx: Tuple[Literal["training", "validation", "test"], int]) -> torch_geometric.data.Data:
         return self.get_mode_data(*idx)
+
+    @staticmethod
+    def get_info() -> dict:
+        pass
