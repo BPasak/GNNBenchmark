@@ -14,7 +14,8 @@ from MaxPoolingX import MaxPoolingX
 class GraphRes(torch.nn.Module):
 
     def __init__(self, dataset, input_shape: torch.Tensor, num_outputs: int, pooling_size=(16, 12),
-                 bias: bool = False, root_weight: bool = False):
+                 bias: bool = False, root_weight: bool = False
+):
         super(GraphRes, self).__init__()
         assert len(input_shape) == 3, "invalid input shape, should be (img_width, img_height, dim)"
         dim = int(input_shape[-1])
@@ -30,7 +31,7 @@ class GraphRes(torch.nn.Module):
             pooling_outputs = 128
         else:
             raise NotImplementedError(f"No model parameters for dataset {dataset}")
-
+        self.disable_pooling = False
         self.conv1 = SplineConv(n[0], n[1], dim=dim, kernel_size=kernel_size, bias=bias, root_weight=root_weight)
         self.norm1 = BatchNorm(in_channels=n[1])
         self.conv2 = SplineConv(n[1], n[2], dim=dim, kernel_size=kernel_size, bias=bias, root_weight=root_weight)
@@ -53,30 +54,49 @@ class GraphRes(torch.nn.Module):
         self.pool7 = MaxPoolingX(input_shape[:2] // 4, size=16)
         self.fc = Linear(pooling_outputs * 16, out_features=num_outputs, bias=bias)
 
+
     def forward(self, data: torch_geometric.data.Batch) -> torch.Tensor:
-        data.x = elu(self.conv1(data.x, data.edge_index, data.edge_attr))
+        data.x = elu(self.conv1(data.x, data.edge_index, data.edge_attr));
         data.x = self.norm1(data.x)
-        data.x = elu(self.conv2(data.x, data.edge_index, data.edge_attr))
+        data.x = elu(self.conv2(data.x, data.edge_index, data.edge_attr));
         data.x = self.norm2(data.x)
 
         x_sc = data.x.clone()
-        data.x = elu(self.conv3(data.x, data.edge_index, data.edge_attr))
+        data.x = elu(self.conv3(data.x, data.edge_index, data.edge_attr));
         data.x = self.norm3(data.x)
-        data.x = elu(self.conv4(data.x, data.edge_index, data.edge_attr))
+        data.x = elu(self.conv4(data.x, data.edge_index, data.edge_attr));
         data.x = self.norm4(data.x)
         data.x = data.x + x_sc
 
-        data.x = elu(self.conv5(data.x, data.edge_index, data.edge_attr))
-        data.x = self.norm5(data.x)
-        data = self.pool5(data.x, pos=data.pos, batch=data.batch, edge_index=data.edge_index, return_data_obj=True)
+        # ---- guard pooling under async ----
+        if not self.disable_pooling:
+            data.x = elu(self.conv5(data.x, data.edge_index, data.edge_attr));
+            data.x = self.norm5(data.x)
+            data = self.pool5(data.x, pos=data.pos, batch=data.batch, edge_index=data.edge_index, return_data_obj=True)
 
-        x_sc = data.x.clone()
-        data.x = elu(self.conv6(data.x, data.edge_index, data.edge_attr))
-        data.x = self.norm6(data.x)
-        data.x = elu(self.conv7(data.x, data.edge_index, data.edge_attr))
-        data.x = self.norm7(data.x)
-        data.x = data.x + x_sc
+            x_sc = data.x.clone()
+            data.x = elu(self.conv6(data.x, data.edge_index, data.edge_attr));
+            data.x = self.norm6(data.x)
+            data.x = elu(self.conv7(data.x, data.edge_index, data.edge_attr));
+            data.x = self.norm7(data.x)
+            data.x = data.x + x_sc
 
-        x = self.pool7(data.x, pos=data.pos[:, :2], batch=data.batch)
-        x = x.view(-1, self.fc.in_features)
-        return self.fc(x)
+            x = self.pool7(data.x, pos=data.pos[:, :2], batch=data.batch)
+            x = x.view(-1, self.fc.in_features)
+            return self.fc(x)
+        else:
+            # no pooling path: simple global mean pool
+            # (keeps async happy; still produces logits)
+            from torch_geometric.nn import global_mean_pool
+            data.x = elu(self.conv5(data.x, data.edge_index, data.edge_attr));
+            data.x = self.norm5(data.x)
+            data.x = elu(self.conv6(data.x, data.edge_index, data.edge_attr));
+            data.x = self.norm6(data.x)
+            data.x = elu(self.conv7(data.x, data.edge_index, data.edge_attr));
+            data.x = self.norm7(data.x)
+            batch = getattr(data, "batch", None)
+            if batch is None:
+                import torch
+                batch = torch.zeros(data.x.size(0), dtype=torch.long, device=data.x.device)
+            z = global_mean_pool(data.x, batch)
+            return self.fc(z)

@@ -62,18 +62,28 @@ for epoch in range(1, 3):
     va_loss, va_acc = run(val_loader,   train=False)
     print(f"Epoch {epoch:02d} | train {tr_loss:.4f}/{tr_acc:.3f} | val {va_loss:.4f}/{va_acc:.3f}")
 
+# 1) split head out before wrapping
+import copy, torch.nn as nn
+head = copy.deepcopy(model.fc).to(device)
+model.fc = nn.Identity()
 
-USE_ASYNC = True
-if USE_ASYNC:
-    try:
-        from aegnn.asyncronous import make_model_asynchronous
-        # edge_attr transform object the async engine expects (mirrors their examples)
-        edge_attr_tf = Cartesian(cat=False, max_value=10.0)
-        model = make_model_asynchronous(model, r, [120, 100], edge_attr_tf).to(device)
-        print("[AEGNN] async enabled")
-    except Exception as e:
-        print("[AEGNN] async wrap failed, continuing sync:", repr(e))
+# 2) wrap backbone only
+from torch_geometric.transforms import Cartesian
+from aegnn.asyncronous import make_model_asynchronous
+from evaluate_flops import evaluate_async_backbone_plus_head
+edge_attr_tf = Cartesian(cat=False, max_value=10.0)
+model = make_model_asynchronous(model.eval(), r, [120, 100], edge_attr_tf).to(device)
+print("[AEGNN] async enabled (backbone only)")
 
-# --- test (batch_size=1 recommended for async) ---
-test_loss, test_acc = run(test_loader, train=False)
-print(f"Test  | loss {test_loss:.4f} acc {test_acc:.3f}")
+# 3) evaluate (small numbers first if on CPU)
+acc_async = evaluate_async_backbone_plus_head(
+    model, head, test_ds, device,
+    init_events=2000,   # 2k–5k on CPU; 25k on GPU
+    stream_events=1,
+    max_sequences=2,
+    verbose=True
+)
+print(f"[Async] accuracy: {acc_async:.3f}")
+
+#test_loss, test_acc = run(test_loader, train=False)
+#print(f"Test  | loss {test_loss:.4f} acc {test_acc:.3f}")
