@@ -1,6 +1,9 @@
 import time
 
 from torch import nn
+import torch_geometric
+
+from Models.base import BaseModel
 
 
 def countParameters(module: nn.Module) -> int:
@@ -53,3 +56,20 @@ def measureRuntime(module: nn.Module) -> nn.Module:
             measureRuntime(modules[module_key])
 
     return module
+
+
+def measure_Latency(model: BaseModel, data: list[torch_geometric.data.Data]):
+    start_time = time.perf_counter()
+    for instance in data:
+        greph = model.data_transform(instance)
+    end_time = time.perf_counter()
+
+    elapsed = end_time - start_time
+    print(f"Task completed in {elapsed:.3f} seconds")
+    return elapsed
+
+
+def countParams(model: BaseModel):
+    total_params = sum(p.numel() for p in model.parameters())
+    print(total_params)
+    return total_params
