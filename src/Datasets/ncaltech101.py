@@ -1,22 +1,22 @@
 import functools
 import os
-from typing import Callable, List, Literal, Tuple, Union
+from typing import Callable, List, Tuple, Union
 
 import numpy as np
 import torch
-import torch_geometric.data
+from torch_geometric.data import Data as PyGData
 from tqdm.auto import tqdm
 
-from src.Datasets.base import Dataset, DatasetInformation
+from src.Datasets.base import Dataset, DatasetInformation, DatasetMode
 
 
 class NCaltech(Dataset):
 
     def __init__(
         self, *, root: Union[str, os.PathLike],
-        transform: Callable[[torch_geometric.data.Data], torch_geometric.data.Data] = None,
-        pre_transform: Callable[[torch_geometric.data.Data], torch_geometric.data.Data] = None,
-        pre_filter: Callable[[torch_geometric.data.Data], bool] = None
+        transform: Callable[[PyGData], PyGData] = None,
+        pre_transform: Callable[[PyGData], PyGData] = None,
+        pre_filter: Callable[[PyGData], bool] = None
     ):
         data_root = os.path.join(root, "Caltech101_annotations")
         self.classes = sorted(
@@ -59,8 +59,7 @@ class NCaltech(Dataset):
     @staticmethod
     @functools.lru_cache(maxsize=100)
     def map_label(label: str) -> int:
-        classes = NCaltech.get_info()["classes"]
-        label_dict = {lbl: i for i, lbl in enumerate(classes)}
+        label_dict = {lbl: i for i, lbl in enumerate(NCaltech.get_info().classes)}
         return label_dict.get(label, None)
 
 
@@ -76,7 +75,7 @@ class NCaltech(Dataset):
         return bbox, obj_contour
 
 
-    def __process_mode__(self, mode: Literal["training", "validation", "test"]) -> None:
+    def __process_mode__(self, mode: DatasetMode) -> None:
         processed_dir = os.path.join(self.root, 'processed', mode)
         os.makedirs(processed_dir, exist_ok=True)
 
@@ -121,7 +120,7 @@ class NCaltech(Dataset):
                 bbox, obj_contour = self.process_annotation_bin(anno_path)
                
                 # --- Create Data object ---
-                data = torch_geometric.data.Data(x=x, pos=pos, label=folder_name)
+                data = PyGData(x=x, pos=pos, label=folder_name)
                 data.bbox = bbox
                 data.obj_contour = obj_contour
                 
@@ -134,7 +133,7 @@ class NCaltech(Dataset):
                 torch.save(data, processed_sequence_path)
 
 
-    def process(self, modes: List[Literal["training", "validation", "test"]] | None = None) -> None:
+    def process(self, modes: List[DatasetMode] | None = None) -> None:
         if modes is None:
             modes = ['training', 'validation', 'test']
 
@@ -144,18 +143,18 @@ class NCaltech(Dataset):
         for mode in modes:
             self.__process_mode__(mode)
 
-    def get_mode_length(self, mode: Literal["training", "validation", "test"]) -> int:
+    def get_mode_length(self, mode: DatasetMode) -> int:
         processed_dir = os.path.join(self.root, 'processed', mode)
         return len(os.listdir(processed_dir))
 
-    def get_mode_data(self, mode: Literal["training", "validation", "test"], idx: int) -> torch_geometric.data.Data:
+    def get_mode_data(self, mode: DatasetMode, idx: int) -> PyGData:
         processed_dir = os.path.join(self.root, 'processed', mode)
         file_name = os.listdir(processed_dir)[idx]
         data = torch.load(os.path.join(processed_dir, file_name), weights_only = False)
 
         return self.transform(data) if self.transform else data
 
-    def __getitem__(self, idx: Tuple[Literal["training", "validation", "test"], int]) -> torch_geometric.data.Data:
+    def __getitem__(self, idx: Tuple[DatasetMode, int]) -> PyGData:
         return self.get_mode_data(*idx)
 
     @staticmethod

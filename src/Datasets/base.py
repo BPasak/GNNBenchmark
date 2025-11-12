@@ -5,6 +5,8 @@ from typing import Callable, List, Literal, Tuple, Union
 
 import torch_geometric.data
 
+DatasetMode = Literal["training", "validation", "test"]
+
 @dataclass
 class DatasetInformation:
     name: str
@@ -26,22 +28,22 @@ class Dataset(abc.ABC):
         self.pre_filter = pre_filter
 
     @abc.abstractmethod
-    def __process_mode__(self, mode: Literal["training", "validation", "test"]) -> None:
+    def __process_mode__(self, mode: DatasetMode) -> None:
         pass
 
     @abc.abstractmethod
-    def process(self, modes: List[Literal["training", "validation", "test"]] | None = None) -> None:
+    def process(self, modes: List[DatasetMode] | None = None) -> None:
         pass
 
     @abc.abstractmethod
-    def get_mode_length(self, mode: Literal["training", "validation", "test"]) -> int:
+    def get_mode_length(self, mode: DatasetMode) -> int:
         pass
 
     @abc.abstractmethod
-    def get_mode_data(self, mode: Literal["training", "validation", "test"], idx: int) -> torch_geometric.data.Data:
+    def get_mode_data(self, mode: DatasetMode, idx: int) -> torch_geometric.data.Data:
         pass
 
-    def __getitem__(self, idx: Tuple[Literal["training", "validation", "test"], int]) -> torch_geometric.data.Data:
+    def __getitem__(self, idx: Tuple[DatasetMode, int]) -> torch_geometric.data.Data:
         return self.get_mode_data(*idx)
 
     @staticmethod
