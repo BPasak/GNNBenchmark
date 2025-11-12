@@ -5,7 +5,8 @@ from typing import Callable, List, Literal, Tuple, Union
 
 import torch_geometric.data
 
-class DatasetInformation(dataclass):
+@dataclass
+class DatasetInformation:
     name: str
     classes: list[str]
     image_size: tuple[int, int]
