@@ -1,7 +1,7 @@
 import functools
 import os
 from typing import Callable, List, Literal, Tuple, Union
-import struct
+
 import numpy as np
 import torch
 import torch_geometric.data
@@ -175,5 +175,5 @@ class NCaltech(Dataset):
                 'stop_sign', 'strawberry', 'sunflower', 'tick', 'trilobite', 'umbrella',
                 'watch', 'water_lilly', 'wheelchair', 'wild_cat', 'windsor_chair', 'wrench', 'yin_yang'
             ],
-            "image size": (300, 200)
+            "image size": (240, 180)
         }
