@@ -4,6 +4,7 @@ import numpy as np
 
 from Datasets.base import Dataset, DatasetMode
 from torch_geometric.data import Data as PyGData
+from torch_geometric.data import Batch as PyGBatch
 
 
 class BatchManager(Iterator):
@@ -13,7 +14,6 @@ class BatchManager(Iterator):
         mode: DatasetMode = "training",
         seed: int | None = None
     ):
-        assert isinstance(dataset, Dataset)
         assert isinstance(batch_size, int) and 0 < batch_size <= dataset.get_mode_length(mode)
         assert mode in ["training", "validation", "test"]
 
@@ -41,7 +41,7 @@ class BatchManager(Iterator):
     def __iter__(self):
         return self
 
-    def __next__(self) -> list[PyGData]:
+    def __next__(self) -> PyGBatch:
         samples_idx = []
         if self._batch_size >= self._sample_count - self.current_pos:
             samples_idx.extend(self._get_samples(self._sample_count - self.current_pos))
@@ -53,4 +53,4 @@ class BatchManager(Iterator):
         for sample_idx in samples_idx:
             samples.append(self._dataset.get_mode_data(self._mode, sample_idx))
 
-        return samples
+        return PyGBatch.from_data_list(samples)
