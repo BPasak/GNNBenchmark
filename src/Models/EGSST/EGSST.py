@@ -7,7 +7,7 @@ from torch_geometric.nn import GCNConv
 from External.EGSST_PAPER.detector.efvit.efvit_backbone import EfficientViTLargeBackbone
 from Models.base import BaseModel
 from Models.EGSST.Components import EnchancedCNN
-from Models.EGSST.transform import filter_connected_subgraphs, normalize_time, radius_graph_pytorch
+from Models.utils import filter_connected_subgraphs, normalize_time, radius_graph_pytorch
 
 
 class EGSST(BaseModel):

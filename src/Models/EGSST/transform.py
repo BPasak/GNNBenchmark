@@ -3,32 +3,15 @@
 
 from __future__ import annotations
 from dataclasses import dataclass
-from typing import Optional, Tuple, List, Union
+from typing import Optional, List, Union
 
 import numpy as np
 import torch
 from torch import Tensor
 from torch_geometric.data import Data
-import networkx
 
+from Models.utils import filter_connected_subgraphs, normalize_time, radius_graph_pytorch
 
-def radius_graph_pytorch(pos: Tensor, radius: float) -> Tensor:
-    """
-    Build radius graph using pure PyTorch - no torch-cluster required
-    """
-
-    radius2 = radius * radius
-
-    x = pos[:, :, None]
-    xT = x.permute([2, 1, 0])
-    dis2 = (xT - x).pow(2).sum(1)
-    mask = dis2 <= radius2
-    
-    mask = torch.triu(mask, diagonal=1)
-
-    edge_index = mask.nonzero(as_tuple=False).t().contiguous()
-
-    return edge_index
 
 @dataclass
 class TransformConfig:
@@ -39,12 +22,6 @@ class TransformConfig:
     device: str = "cpu"            
     ensure_undirected: bool = True # whether to make edges undirected
 
-def normalize_time(t: Tensor, beta: float) -> Tensor:
-    """
-    Normalize timestamps: t* = beta * (t - t0)
-    """
-    t0 = t.min()
-    return beta * (t - t0)
 
 def build_nodes(events_xyttp: Tensor, beta: float, device: str) -> Tensor:
     """
@@ -94,17 +71,6 @@ def to_pyg_data(node_feats: Tensor, edge_index: Tensor, y: Optional[Tensor] = No
         data.y = y
     return data
 
-def filter_connected_subgraphs(data: Data, min_nodes: int) -> Data:
-    """
-    EGSST §3.2: Keep only nodes belonging to connected components of size >= min_nodes
-    """
-    edge_list = data.edge_index.cpu().numpy().T
-    graph = networkx.Graph(list(edge_list))
-    components = networkx.connected_components(graph)
-    retained_vertices = [list(component) for component in components if len(component) >= min_nodes]
-    retained_vertices = np.concatenate(retained_vertices)
-    
-    return data.subgraph(torch.Tensor(retained_vertices).int())
 
 def events_to_graph(
     events_xyttp: Union[np.ndarray, Tensor],
