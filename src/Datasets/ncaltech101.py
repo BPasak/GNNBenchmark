@@ -7,7 +7,7 @@ import torch
 import torch_geometric.data
 from tqdm.auto import tqdm
 
-from src.Datasets.base import Dataset
+from src.Datasets.base import Dataset, DatasetInformation
 
 
 class NCaltech(Dataset):
@@ -31,7 +31,8 @@ class NCaltech(Dataset):
         )
         print("x")
 
-    def processEventBin(self, path):  
+    @staticmethod
+    def process_event_bin(path):
         instance = np.fromfile(path, dtype=np.uint8)
         if instance.size % 5 != 0:
             raise ValueError(f"File size {instance.size} not divisible by 5.")
@@ -48,19 +49,23 @@ class NCaltech(Dataset):
         # Standardizing polarity to values -1 and 1
         p = np.where(p == 0, -1, p)
 
-        ts = ((b3 & 0x7F) << 16) | (b4 << 8) | b5  
+        ts = ((b3 & 0x7F) << 16) | (b4 << 8) | b5
 
         return x, y, p, ts
 
 
-##cool code from AEGNN. This is handy for lableing instnaces since they don't have classes in the annotations it's bounding boxes
+    ##cool code from AEGNN.
+    # This is handy for labeling instances since they don't have classes in the annotations it's bounding boxes
+    @staticmethod
     @functools.lru_cache(maxsize=100)
-    def map_label(self, label: str) -> int:
-        label_dict = {lbl: i for i, lbl in enumerate(self.classes)}
+    def map_label(label: str) -> int:
+        classes = NCaltech.get_info()["classes"]
+        label_dict = {lbl: i for i, lbl in enumerate(classes)}
         return label_dict.get(label, None)
 
 
-    def processAnnotationBin(self, path):
+    @staticmethod
+    def process_annotation_bin(path):
 
         parsed_file = np.fromfile(path, dtype=np.int16)
         bbox_point_count = parsed_file[1]
@@ -107,13 +112,13 @@ class NCaltech(Dataset):
                     continue
 
                 # --- Process event bin ---
-                x_vals, y_vals, p, ts = self.processEventBin(img_path)
+                x_vals, y_vals, p, ts = self.process_event_bin(img_path)
                 events = np.stack([x_vals, y_vals, ts, p], axis=1)
                 events = torch.from_numpy(events).float()
                 x, pos = events[:, -1:], events[:, :3]  # polarity as feature, xyz/time as pos
 
                 # --- Process annotation bin ---
-                bbox, obj_contour = self.processAnnotationBin(anno_path)
+                bbox, obj_contour = self.process_annotation_bin(anno_path)
                
                 # --- Create Data object ---
                 data = torch_geometric.data.Data(x=x, pos=pos, label=folder_name)
@@ -154,9 +159,10 @@ class NCaltech(Dataset):
         return self.get_mode_data(*idx)
 
     @staticmethod
-    def get_info() -> dict:
-        return {
-            "classes": [
+    def get_info() -> DatasetInformation:
+        return DatasetInformation(
+            name = "NCaltech101",
+            classes = [
                 'Faces_easy', 'Leopards', 'Motorbikes', 'accordion', 'airplanes',
                 'anchor', 'ant', 'barrel', 'bass', 'beaver', 'binocular', 'bonsai',
                 'brain', 'brontosaurus', 'buddha', 'butterfly', 'camera', 'cannon',
@@ -175,5 +181,5 @@ class NCaltech(Dataset):
                 'stop_sign', 'strawberry', 'sunflower', 'tick', 'trilobite', 'umbrella',
                 'watch', 'water_lilly', 'wheelchair', 'wild_cat', 'windsor_chair', 'wrench', 'yin_yang'
             ],
-            "image size": (240, 180)
-        }
+            image_size = (240, 180)
+        )

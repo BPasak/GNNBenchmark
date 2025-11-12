@@ -1,9 +1,14 @@
 import abc
+from dataclasses import dataclass
 from os import PathLike
 from typing import Callable, List, Literal, Tuple, Union
 
 import torch_geometric.data
 
+class DatasetInformation(dataclass):
+    name: str
+    classes: list[str]
+    image_size: tuple[int, int]
 
 ### Read docs: https://pytorch-geometric.readthedocs.io/en/latest/generated/torch_geometric.data.Dataset.html#torch_geometric.data.Dataset
 class Dataset(abc.ABC):
@@ -39,5 +44,5 @@ class Dataset(abc.ABC):
         return self.get_mode_data(*idx)
 
     @staticmethod
-    def get_info() -> dict:
+    def get_info() -> DatasetInformation:
         pass
