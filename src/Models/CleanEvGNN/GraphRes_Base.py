@@ -9,15 +9,15 @@ from torch.nn.functional import relu
 from torch_geometric.nn.conv import SplineConv, GCNConv, LEConv, PointNetConv
 from torch_geometric.nn.norm import BatchNorm
 from torch_geometric.transforms import Cartesian, Distance
-from .max_pool import MaxPooling
-from .max_pool_x import MaxPoolingX
-from ...Models.utils import normalize_time, sub_sampling
-from ..base import BaseModel
+from Models.CleanEvGNN.max_pool import MaxPooling
+from Models.CleanEvGNN.max_pool_x import MaxPoolingX
+from Models.utils import normalize_time, sub_sampling
+from Models.base import BaseModel
 from torch_geometric.data import Batch as PyGBatch
-from .my_conv import MyConv
-from .my_fuse import MyConvBNReLU, qLinear
-from .QType import Qtype
-from .BaseTransformPerSample import Compose, RandomXFlip, RandomShiftPerSample, RandomSubgraph, RandomRangeSubgraph
+from Models.CleanEvGNN.my_conv import MyConv
+from Models.CleanEvGNN.my_fuse import MyConvBNReLU, qLinear
+from Models.CleanEvGNN.QType import Qtype
+from Models.CleanEvGNN.BaseTransformPerSample import Compose, RandomXFlip, RandomShiftPerSample, RandomSubgraph, RandomRangeSubgraph
 
 class GraphRes(BaseModel):
 
@@ -69,8 +69,10 @@ class GraphRes(BaseModel):
 
                 pooling_outputs = self.fuse4.out_channels
                 # pooling_outputs = self.fuse2.out_channels
-                num_grids = 8 * 7
                 pooling_dm_dims = torch.tensor([16., 16.], device=self.device)
+                # Berechne num_grids dynamisch: (width/16) * (height/16)
+                num_grids_per_dim = torch.ceil(self.input_shape[:2] / pooling_dm_dims).int()
+                num_grids = int(num_grids_per_dim[0] * num_grids_per_dim[1])
                 self.pool = MaxPoolingX(pooling_dm_dims, size=num_grids, img_shape=self.input_shape[:2])
                 self.fc = qLinear(pooling_outputs * num_grids, out_features=num_outputs, bias=False)
                 # self.fc = torch.nn.Sequential(
@@ -246,8 +248,9 @@ class GraphRes(BaseModel):
                 else:
                     raise ValueError(f"Unkown convolution type: {self.conv_type}")
 
-                num_grids = 8 * 7
                 pooling_dm_dims = torch.tensor([16., 16.], device=self.device)
+                num_grids_per_dim = torch.ceil(self.input_shape[:2] / pooling_dm_dims).int()
+                num_grids = int(num_grids_per_dim[0] * num_grids_per_dim[1])
                 self.pool = MaxPoolingX(pooling_dm_dims, size=num_grids, img_shape=self.input_shape[:2])
 
                 self.hidden = 128
@@ -277,8 +280,9 @@ class GraphRes(BaseModel):
                 pooling_outputs = self.fuse4.out_channels
                 # pooling_outputs = self.fuse2.out_channels
 
-                num_grids = 8 * 7
                 pooling_dm_dims = torch.tensor([16., 16.], device=self.device)
+                num_grids_per_dim = torch.ceil(self.input_shape[:2] / pooling_dm_dims).int()
+                num_grids = int(num_grids_per_dim[0] * num_grids_per_dim[1])
                 self.pool = MaxPoolingX(pooling_dm_dims, size=num_grids, img_shape=self.input_shape[:2])
                 self.fc = qLinear(pooling_outputs * num_grids, out_features=num_outputs, bias=False)
 
@@ -316,10 +320,27 @@ class GraphRes(BaseModel):
 
     def forward(self, data: PyGBatch, **kwargs) -> torch.Tensor:
         # assert data.x.device.type == data.pos.device.type == data.edge_index.device.type == self.device.type
+
+        print(f"\n[GraphRes.forward] Start - training={self.training}")
+        print(f"  data.pos shape: {data.pos.shape}, data.batch unique: {data.batch.unique()}")
+        print(f"  x range: [{data.pos[:, 0].min():.2f}, {data.pos[:, 0].max():.2f}]")
+        print(f"  y range: [{data.pos[:, 1].min():.2f}, {data.pos[:, 1].max():.2f}]")
+
         if self.training is True:
             with torch.no_grad():
                 data = self.trans(data)
-                # pass
+
+                print(f"[GraphRes.forward] Nach Random-Transforms:")
+                print(f"  x range: [{data.pos[:, 0].min():.2f}, {data.pos[:, 0].max():.2f}]")
+                print(f"  y range: [{data.pos[:, 1].min():.2f}, {data.pos[:, 1].max():.2f}]")
+
+                #only think added by me
+                data.pos[:, 0] = torch.clamp(data.pos[:, 0], 0, self.input_shape[1] - 1)
+                data.pos[:, 1] = torch.clamp(data.pos[:, 1], 0, self.input_shape[0] - 1)
+
+                print(f"[GraphRes.forward] Nach Clamping:")
+                print(f"  x range: [{data.pos[:, 0].min():.2f}, {data.pos[:, 0].max():.2f}]")
+                print(f"  y range: [{data.pos[:, 1].min():.2f}, {data.pos[:, 1].max():.2f}]")
 
         if not self.distill:
             if self.conv_type == 'fuse':
@@ -335,6 +356,7 @@ class GraphRes(BaseModel):
                     data.x = self.fuse3(x=data.x, pos=data.pos, edge_index=data.edge_index)
                     data.x = self.fuse4(x=data.x, pos=data.pos, edge_index=data.edge_index)
                     # data.x = MyConvBNReLU.dequant_tensor(data.x, scale=self.fuse4.y_scale)
+
 
                 x, _ = self.pool(data.x, pos=data.pos[:, :2], batch=data.batch)
                 x = x.view(-1, self.fc.in_features)  # x.shape = [batch_size, num_grids*num_last_hidden_features]
@@ -522,31 +544,30 @@ class GraphRes(BaseModel):
         return output
 
     def data_transform(
-        self, x: PyGData,
-        n_samples: int = 10000, sampling: bool = True,
-        beta: float = 0.5e-5, radius: float = 3.0,
-        max_neighbors: int = 32, **kwargs
+            self, x: PyGData,
+            n_samples: int = 10000, sampling: bool = True,
+            beta: float = 0.5e-5, radius: float = 3.0,
+            max_neighbors: int = 32, **kwargs
     ) -> PyGData:
 
         # Transform polarity from {-1,1} to {0,1}
         x.x = torch.where(x.x == -1., 0., x.x)
 
-        window_us = 50 * 1000
-        t = x.pos[x.num_nodes // 2, 2]
-        index1 = torch.clamp(torch.searchsorted(x.pos[:, 2].contiguous(), t) - 1, 0, x.num_nodes - 1)
-        index0 = torch.clamp(torch.searchsorted(x.pos[:, 2].contiguous(), t - window_us) - 1, 0, x.num_nodes - 1)
-        num_nodes = x.num_nodes
-        for key, item in x:
-            if torch.is_tensor(item) and item.size(0) == num_nodes and item.size(0) != 1:
-                x[key] = item[index0:index1, :]
+        # ✅ NEU: Überspringe das Zeitfenster
+        # (Deine Events stammen bereits aus einem kurzen Zeitbereich)
 
-        x = sub_sampling(x, n_samples = n_samples, sub_sample = sampling)
+        # Clampe räumliche Koordinaten
+        x.pos[:, 0] = torch.clamp(x.pos[:, 0], 0, self.model.input_shape[1] - 1)
+        x.pos[:, 1] = torch.clamp(x.pos[:, 1], 0, self.model.input_shape[0] - 1)
 
-        # Re-weight temporal vs. spatial dimensions to account for different resolutions.
-        x.pos[:, 2] = normalize_time(x.pos[:, 2], beta = beta)
-        # Radius graph generation.
-        x.edge_index = radius_graph(x.pos, r = radius, max_num_neighbors = max_neighbors)
-        edge_attr = Cartesian(cat = False, max_value = 10.0)
+        x = sub_sampling(x, n_samples=n_samples, sub_sample=sampling)
+
+        # Zeit-Normalisierung
+        x.pos[:, 2] = normalize_time(x.pos[:, 2], beta=beta)
+
+        # Graph-Konstruktion
+        x.edge_index = radius_graph(x.pos, r=radius, max_num_neighbors=max_neighbors)
+        edge_attr = Cartesian(cat=False, max_value=10.0)
         x.edge_attr = edge_attr(x).edge_attr
         return x
 

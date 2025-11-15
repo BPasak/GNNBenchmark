@@ -12,7 +12,7 @@ from torch_geometric.data import Data
 from torch_geometric.nn.pool import max_pool, voxel_grid
 from typing import Callable, List, Optional, Tuple, Union
 from torch import Tensor
-from .grid import fixed_voxel_grid
+from Models.CleanEvGNN.grid import fixed_voxel_grid
 
 
 class MaxPooling(torch.nn.Module):

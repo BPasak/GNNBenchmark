@@ -11,7 +11,7 @@ from torch import Tensor
 from torch.nn import Linear
 from torch.quantization.observer import PerChannelMinMaxObserver, MinMaxObserver
 
-# from torch_geometric.nn.conv import PointNetConv
+from torch_geometric.nn.conv import PointNetConv
 from torch_geometric.nn.conv import MessagePassing
 from torch_geometric.nn.inits import reset
 from torch_geometric.typing import (
@@ -25,7 +25,7 @@ from torch_geometric.utils import add_self_loops, remove_self_loops
 from torch_geometric.nn.norm import BatchNorm
 from torch.nn.functional import relu
 
-from aegnn.utils import Qtype
+from Models.CleanEvGNN.QType import Qtype
 
 
 class MyConvBNReLU(MessagePassing):
@@ -49,12 +49,12 @@ class MyConvBNReLU(MessagePassing):
         self.calibre = False
         self.quantized = False
 
-        self.obs_x = MinMaxObserver(dtype=torch.quint8, qscheme=torch.per_channel_affine)
-        self.obs_y = MinMaxObserver(dtype=torch.quint8, qscheme=torch.per_channel_affine)
-        # w only observe out feature qparams
+        # Nachher (korrekt):
+        self.obs_x = MinMaxObserver(dtype=torch.quint8, qscheme=torch.per_tensor_affine)
+        self.obs_y = MinMaxObserver(dtype=torch.quint8, qscheme=torch.per_tensor_affine)        # w only observe out feature qparams
         # self.obs_w = MinMaxObserver(dtype=torch.qint8, qscheme=torch.per_channel_symmetric)
         self.obs_w = PerChannelMinMaxObserver(ch_axis=1, dtype=torch.qint8, qscheme=torch.per_channel_symmetric)
-        self.obs_b = MinMaxObserver(dtype=torch.qint8, qscheme=torch.per_channel_symmetric)
+        self.obs_b = MinMaxObserver(dtype=torch.qint8, qscheme=torch.per_tensor_affine)
 
         self.reset_parameters()
 

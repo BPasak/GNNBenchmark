@@ -14,14 +14,14 @@ import torchmetrics.functional as pl_metrics
 
 from torch.nn.functional import softmax
 from typing import Tuple
-from ..CleanEvGNN import by_name as model_by_name
+from Models.CleanEvGNN import by_name as model_by_name
 
 
 import torch
 from torch_geometric.data import Data as PyGData
 from torch_geometric.nn.pool import radius_graph
 from torch_geometric.transforms import Cartesian, Distance
-from ...Models.utils import normalize_time, sub_sampling
+from Models.utils import normalize_time, sub_sampling
 
 class RecognitionModel(pl.LightningModule):
 
@@ -143,31 +143,22 @@ class RecognitionModel(pl.LightningModule):
         # }
 
     def data_transform(
-        self, x: PyGData,
-        n_samples: int = 10000, sampling: bool = True,
-        beta: float = 0.5e-5, radius: float = 3.0,
-        max_neighbors: int = 32, **kwargs
+            self, x: PyGData,
+            n_samples: int = 10000, sampling: bool = True,
+            beta: float = 0.5e-5, radius: float = 3.0,
+            max_neighbors: int = 32, **kwargs
     ) -> PyGData:
-
-        # Transform polarity from {-1,1} to {0,1}
         x.x = torch.where(x.x == -1., 0., x.x)
 
-        window_us = 50 * 1000
-        t = x.pos[x.num_nodes // 2, 2]
-        index1 = torch.clamp(torch.searchsorted(x.pos[:, 2].contiguous(), t) - 1, 0, x.num_nodes - 1)
-        index0 = torch.clamp(torch.searchsorted(x.pos[:, 2].contiguous(), t - window_us) - 1, 0, x.num_nodes - 1)
-        num_nodes = x.num_nodes
-        for key, item in x:
-            if torch.is_tensor(item) and item.size(0) == num_nodes and item.size(0) != 1:
-                x[key] = item[index0:index1, :]
+        # Clampe Positionen VOR dem Sampling
+        x.pos[:, 0] = torch.clamp(x.pos[:, 0], 0, self.model.input_shape[1] - 1)
+        x.pos[:, 1] = torch.clamp(x.pos[:, 1], 0, self.model.input_shape[0] - 1)
 
-        x = sub_sampling(x, n_samples = n_samples, sub_sample = sampling)
+        x = sub_sampling(x, n_samples=n_samples, sub_sample=sampling)
+        x.pos[:, 2] = normalize_time(x.pos[:, 2], beta=beta)
 
-        # Re-weight temporal vs. spatial dimensions to account for different resolutions.
-        x.pos[:, 2] = normalize_time(x.pos[:, 2], beta = beta)
-        # Radius graph generation.
-        x.edge_index = radius_graph(x.pos, r = radius, max_num_neighbors = max_neighbors)
-        edge_attr = Cartesian(cat = False, max_value = 10.0)
+        x.edge_index = radius_graph(x.pos, r=radius, max_num_neighbors=max_neighbors)
+        edge_attr = Cartesian(cat=False, max_value=10.0)
         x.edge_attr = edge_attr(x).edge_attr
         return x
 

@@ -12,7 +12,7 @@ from torch_geometric.data import Data
 from torch_geometric.nn.pool import max_pool_x, voxel_grid, avg_pool_x
 from typing import List, Optional, Tuple, Union
 from torch import Tensor
-from .grid import fixed_voxel_grid
+from Models.CleanEvGNN.grid import fixed_voxel_grid
 
 from torch_scatter import scatter
 
@@ -36,8 +36,10 @@ class MaxPoolingX(torch.nn.Module):
         # for a single sample
         if batch is None:
             batch = torch.zeros(pos.size(0), device=pos.device, dtype=torch.long)
+
         # cluster = voxel_grid(pos, batch=batch, size=self.voxel_size)
         cluster = fixed_voxel_grid(pos, full_shape=self.full_shape, size=self.voxel_size, batch=batch)
+
         x, _ = max_pool_x(cluster, x, batch, size=self.size)
         # x, _ = avg_pool_x(cluster, x, batch, size=self.size)
         # x, _ = self.sum_pool_x(cluster, x, batch, size=self.size)
