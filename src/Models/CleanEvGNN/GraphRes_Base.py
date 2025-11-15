@@ -321,26 +321,13 @@ class GraphRes(BaseModel):
     def forward(self, data: PyGBatch, **kwargs) -> torch.Tensor:
         # assert data.x.device.type == data.pos.device.type == data.edge_index.device.type == self.device.type
 
-        print(f"\n[GraphRes.forward] Start - training={self.training}")
-        print(f"  data.pos shape: {data.pos.shape}, data.batch unique: {data.batch.unique()}")
-        print(f"  x range: [{data.pos[:, 0].min():.2f}, {data.pos[:, 0].max():.2f}]")
-        print(f"  y range: [{data.pos[:, 1].min():.2f}, {data.pos[:, 1].max():.2f}]")
-
         if self.training is True:
             with torch.no_grad():
                 data = self.trans(data)
-
-                print(f"[GraphRes.forward] Nach Random-Transforms:")
-                print(f"  x range: [{data.pos[:, 0].min():.2f}, {data.pos[:, 0].max():.2f}]")
-                print(f"  y range: [{data.pos[:, 1].min():.2f}, {data.pos[:, 1].max():.2f}]")
-
-                #only think added by me
+                # Clampe Positionen nach Random-Transforms
                 data.pos[:, 0] = torch.clamp(data.pos[:, 0], 0, self.input_shape[1] - 1)
                 data.pos[:, 1] = torch.clamp(data.pos[:, 1], 0, self.input_shape[0] - 1)
 
-                print(f"[GraphRes.forward] Nach Clamping:")
-                print(f"  x range: [{data.pos[:, 0].min():.2f}, {data.pos[:, 0].max():.2f}]")
-                print(f"  y range: [{data.pos[:, 1].min():.2f}, {data.pos[:, 1].max():.2f}]")
 
         if not self.distill:
             if self.conv_type == 'fuse':
