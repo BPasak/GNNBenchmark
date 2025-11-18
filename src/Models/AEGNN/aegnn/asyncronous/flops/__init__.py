@@ -1,7 +1,7 @@
 import logging
 
-from aegnn.asyncronous.flops.conv import compute_flops_conv
-from aegnn.asyncronous.flops.voxel_grid import compute_flops_voxel_grid
+from .conv import compute_flops_conv
+from .voxel_grid import compute_flops_voxel_grid
 
 
 def compute_flops_from_module(module) -> int:
