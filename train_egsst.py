@@ -116,8 +116,8 @@ def train_egsst_model(model, training_set: BatchManager, optimizer, num_epochs=5
         if 'loss_giou' in loss_dict:
             print(f"  - giou_loss: {loss_dict['loss_giou'].item():.4f}")
 
-        if epoch % 50 == 0:
-            torch.save(model.state_dict(), f"egsst_trained_epoch_{epoch}.pth")
+        if epoch % 20 == 0 or epoch == num_epochs - 1:
+            torch.save(model.state_dict(), f"TrainedModels\egsst_trained_epoch_{epoch}.pth")
 
     return model
 
@@ -127,12 +127,6 @@ print("Starting EG-SST training...")
 print("This will train the model for object detection on NCaltech101")
 
 # Start training
-trained_model = train_egsst_model(egsst, training_set, optimizer, num_epochs=50)
-
-# Save the trained model
-#model_save_path = os.path.join(project_path, "egsst_trained.pth")
-model_save_path = "egsst_trained.pth"
-torch.save(trained_model.state_dict(), model_save_path)
-print(f"Model saved to: {model_save_path}")
+trained_model = train_egsst_model(egsst, training_set, optimizer, num_epochs=200)
 
 print("✓ EG-SST training complete!")
