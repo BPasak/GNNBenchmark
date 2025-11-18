@@ -1,9 +1,9 @@
 import torch
 import torch.nn as nn
 import torch_geometric
-from torch import Tensor
-from torch_geometric.data import Data
+from torch_geometric.data import Data, Batch as PyGBatch
 from torch_geometric.nn import GCNConv
+from torch_scatter import scatter_max
 
 from External.EGSST_PAPER.detector.efvit.efvit_backbone import EfficientViTLargeBackbone
 from Models.base import BaseModel
@@ -82,14 +82,20 @@ class EGSST(BaseModel):
         C = features.size(1)
 
         # Create dense tensor on same device/dtype as features
-        dense = features.new_zeros(C, H, W)
+        dense = features.new_full((C, H * W), float('-inf'))
 
         # Clamp coordinates to valid range
         x = xy[:, 0].clamp(0, W - 1).long()
         y = xy[:, 1].clamp(0, H - 1).long()
 
-        # For now: last-writer-wins if multiple nodes land in same pixel
-        dense[:, y, x] = features.T
+        linear_idx = y * W + x
+
+        for c in range(C):
+            dense[c], _ = scatter_max(features[:, c], linear_idx, dim_size = H * W)
+
+        dense = torch.where(torch.isinf(dense), torch.zeros_like(dense), dense)
+        dense = dense.view(C, H, W)
+
         return dense
 
     
@@ -107,14 +113,23 @@ class EGSST(BaseModel):
         raise TypeError(f"Unexpected backbone output type: {type(vit_out)}")
 
 
-    def forward(self, x: Data, **kwargs) -> torch.Tensor:
-        out = torch.cat([x.pos, x.x], dim=1)
+    def forward(self, x: PyGBatch, **kwargs) -> torch.Tensor:
+        graphs = []
+        for graph in range(x.num_graphs):
+            graph = x.get_example(graph)
+            graphs.append((torch.cat([graph.pos, graph.x], dim=1), graph.edge_index))
 
         for gcn in self.GCNs:
-            out = gcn(out, x.edge_index)
+            graphs_new = []
+            for graph, edge_index in graphs:
+                out = gcn(graph, edge_index)
+                graphs_new.append((out, edge_index))
+            graphs = graphs_new
 
-        dense = self.__wrap_into_dense(x.pos[:, :2].int(), out, self.target_size)
-        dense = dense[None, :, :, :]  # [1, 32, H, W] for now
+        dense = []
+        for idx, graph in enumerate(graphs):
+            dense.append(self.__wrap_into_dense(x.get_example(idx).pos[:, :2].int(), graph[0], self.target_size)[None, :, :, :])
+        dense = torch.cat(dense, dim = 0)  # [1, 32, H, W] for now
 
         if self.Ecnn_flag:
             dense = self.ECNN(dense)

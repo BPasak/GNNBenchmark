@@ -1,9 +1,7 @@
-import torch
-import torch.nn as nn
-from torch.optim import Adam
 import os
-import sys
-from tqdm import tqdm
+
+import torch
+from torch.optim import Adam
 
 print("=== EG-SST OBJECT DETECTION TRAINING ===")
 
@@ -11,9 +9,9 @@ os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
 
 
 # Set paths
-project_path = r"C:\Users\ivosi\Downloads\Shraddha\GNNBenchmark"
-sys.path.insert(0, project_path)
-sys.path.insert(0, os.path.join(project_path, 'src'))
+# project_path = r"C:\Users\ivosi\Downloads\Shraddha\GNNBenchmark"
+# sys.path.insert(0, project_path)
+# sys.path.insert(0, os.path.join(project_path, 'src'))
 
 
 
@@ -21,19 +19,13 @@ sys.path.insert(0, os.path.join(project_path, 'src'))
 from src.Models.EGSST.EGSST import EGSST
 from src.Datasets.batching import BatchManager
 from src.Datasets.ncaltech101 import NCaltech
-from src.External.EGSST_PAPER.detector.rtdetr_header import RTDETRHead
-
-
-
-
-
 
 # Set device
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
 
 # Dataset setup
-dataset_path = r"C:\Users\ivosi\Downloads\Shraddha"
+dataset_path = r"D:\Uniwersytet\GNNBenchmarking\Datasets\NCaltech"
 ncaltech = NCaltech(root=dataset_path, transform=None)  # No transform for now
 
 print(f"Training set size: {ncaltech.get_mode_length('training')}")
@@ -85,59 +77,47 @@ def transform_graph(graph):
 ncaltech.transform = transform_graph
 
 # Batch manager
-batch_size = 1  # Small batch size for memory constraints
+batch_size = 10  # Small batch size for memory constraints
 training_set = BatchManager(dataset=ncaltech, batch_size=batch_size, mode="training")
 
 # Optimizer
-optimizer = Adam(egsst.parameters(), lr=5e-5)
+optimizer = Adam(egsst.parameters(), lr=1e-3)
+scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=25, cooldown = 10, verbose=True)
 
 # Training loop
-def train_egsst_model(model, data_loader, optimizer, num_epochs=50):
+def train_egsst_model(model, training_set: BatchManager, optimizer, num_epochs=50):
     model.train()
 
-    # how many batches per epoch (approx)
-    steps_per_epoch = ncaltech.get_mode_length("training") // batch_size
-
     for epoch in range(num_epochs):
-        # create a fresh BatchManager for this epoch
-        epoch_loader = BatchManager(dataset=ncaltech,
-                                    batch_size=batch_size,
-                                    mode="training")
 
-        epoch_loss = 0.0
+        batch = next(training_set)
+        batch = batch.to(device)
 
-        for step in range(steps_per_epoch):
-            try:
-                batch = next(epoch_loader)
-            except StopIteration:
-                break
+        # ---- build YOLO-style targets for this batch ----
+        targets = []
+        for i in range(batch.num_graphs):
+            graph_data = batch.get_example(i)
+            targets.append(bbox_to_yolo(graph_data))
 
-            batch = batch.to(device)
+        targets_tensor = torch.stack(targets).unsqueeze(1).to(device)  # [B, 1, 5]
 
-            # ---- build YOLO-style targets for this batch ----
-            targets = []
-            for i in range(batch.num_graphs):
-                graph_data = batch.get_example(i)
-                targets.append(bbox_to_yolo(graph_data))
+        # ---- forward + backward ----
+        optimizer.zero_grad()
+        total_loss, loss_dict = model(batch, targets = targets_tensor)
+        total_loss.backward()
+        optimizer.step()
+        scheduler.step(total_loss)
 
-            targets_tensor = torch.stack(targets).unsqueeze(1).to(device)  # [B, 1, 5]
+        epoch_loss = total_loss.item()
 
-            # ---- forward + backward ----
-            optimizer.zero_grad()
-            total_loss, loss_dict = model(batch, targets=targets_tensor)
-            total_loss.backward()
-            optimizer.step()
+        print(f"Epoch {epoch}: mean loss = {epoch_loss:.4f}")
+        if 'loss_bbox' in loss_dict:
+            print(f"  - bbox_loss: {loss_dict['loss_bbox'].item():.4f}")
+        if 'loss_giou' in loss_dict:
+            print(f"  - giou_loss: {loss_dict['loss_giou'].item():.4f}")
 
-            epoch_loss += total_loss.item()
-
-        # log every 5 epochs
-        if epoch % 5 == 0:
-            mean_loss = epoch_loss / max(1, steps_per_epoch)
-            print(f"Epoch {epoch}: mean loss = {mean_loss:.4f}")
-            if 'loss_bbox' in loss_dict:
-                print(f"  - bbox_loss: {loss_dict['loss_bbox'].item():.4f}")
-            if 'loss_giou' in loss_dict:
-                print(f"  - giou_loss: {loss_dict['loss_giou'].item():.4f}")
+        if epoch % 50 == 0:
+            torch.save(model.state_dict(), f"egsst_trained_epoch_{epoch}.pth")
 
     return model
 
@@ -150,7 +130,8 @@ print("This will train the model for object detection on NCaltech101")
 trained_model = train_egsst_model(egsst, training_set, optimizer, num_epochs=50)
 
 # Save the trained model
-model_save_path = os.path.join(project_path, "egsst_trained.pth")
+#model_save_path = os.path.join(project_path, "egsst_trained.pth")
+model_save_path = "egsst_trained.pth"
 torch.save(trained_model.state_dict(), model_save_path)
 print(f"Model saved to: {model_save_path}")
 
