@@ -26,6 +26,9 @@ class AEGNN_Detection(GraphRes):
         self.num_outputs_per_cell = num_classes + num_bounding_boxes * 5  # (x, y, width, height, confidence)
         num_outputs = self.num_outputs_per_cell * self.cell_map_shape[0] * self.cell_map_shape[1]
 
+        self.cell_x_shift = (torch.tensor(list(range(self.cell_map_shape[0])), requires_grad = False)/self.cell_map_shape[0])[None, :, None, None]
+        self.cell_y_shift = (torch.tensor(list(range(self.cell_map_shape[1])), requires_grad = False)/self.cell_map_shape[1])[None, None, :, None]
+
         super(AEGNN_Detection, self).__init__(
             input_shape = input_shape,
             kernel_size = kernel_size, n = n, pooling_outputs = pooling_outputs,
@@ -35,7 +38,20 @@ class AEGNN_Detection(GraphRes):
         
     def forward(self, data: PyGBatch, **kwargs) -> torch.Tensor:
         out = super(AEGNN_Detection, self).forward(data, **kwargs)
-        return out.view(-1, *self.cell_map_shape, self.num_outputs_per_cell)
+        out = out.view(-1, *self.cell_map_shape, self.num_outputs_per_cell)
+        parsed_out = self.parse_output(out)
+        center_x = parsed_out[0]/self.cell_map_shape[0] + self.cell_x_shift.to(out.device)
+        center_y = parsed_out[1]/self.cell_map_shape[1] + self.cell_y_shift.to(out.device)
+
+        out_dict = {
+            "pred_logits": parsed_out[5].reshape(center_x.shape[0], -1, self.num_classes),
+            "pred_boxes": torch.cat(
+                [center_x, center_y, parsed_out[3], parsed_out[2]],
+                dim = -1
+            ).reshape(center_x.shape[0], -1, 4),
+        }
+
+        return out_dict
 
     ###############################################################################################
     # Parsing #####################################################################################
