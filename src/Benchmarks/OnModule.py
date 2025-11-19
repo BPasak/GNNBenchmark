@@ -59,6 +59,7 @@ def measureRuntime(module: nn.Module) -> nn.Module:
     return module
 
 
+@torch.no_grad()
 def measure_graph_construction_latency(model: BaseModel, data: list[torch_geometric.data.Data]):
     start_time = time.perf_counter()
     for instance in data:
