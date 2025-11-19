@@ -11,6 +11,7 @@ rtdetr:
     #eval_spatial_size=None
   hybrid_encoder:
   decoder:
+    num_classes: 101
   matcher:
     weight_dict:
       cost_class: 0.5
@@ -20,6 +21,7 @@ rtdetr:
     #alpha=0.25
     #gamma=2.0
   criterion:
+    num_classes: 101
     weight_dict:
       loss_bbox: 1.0
       loss_giou: 1.0
