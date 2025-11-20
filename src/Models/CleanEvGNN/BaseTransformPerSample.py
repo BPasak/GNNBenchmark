@@ -23,6 +23,16 @@ class BaseTransformPerSample(BaseTransform):
         transformed_batch = Batch.from_data_list(transformed_data_list)
         return transformed_batch
 
+    def forward(self, batch: Batch):
+        """Alias for torch_geometric's expected API.
+
+        Some PyG code checks for a `forward` method on transforms (or treats
+        transforms as callables with a forward). Adding this delegator ensures
+        subclasses don't remain abstract if they implement transform_per_sample
+        but not forward.
+        """
+        return self.__call__(batch)
+
 
 class RandomXFlip(BaseTransform):
     def __init__(self, p=0.5):

@@ -4,9 +4,10 @@ from typing import Iterator
 
 import numpy as np
 
-from Datasets.base import Dataset, DatasetMode
 from torch_geometric.data import Data as PyGData
 from torch_geometric.data import Batch as PyGBatch
+
+from Datasets.base import Dataset, DatasetMode
 
 
 class BatchManager(Iterator):
