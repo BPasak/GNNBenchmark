@@ -4,6 +4,7 @@ import torch_geometric
 from torch_geometric.data import Data, Batch as PyGBatch
 from torch_geometric.nn import GCNConv
 from torch_scatter import scatter_max
+from torch_geometric.nn import radius_graph
 
 from External.EGSST_PAPER.detector.efvit.efvit_backbone import EfficientViTLargeBackbone
 from Models.base import BaseModel
@@ -159,7 +160,7 @@ class EGSST(BaseModel):
 
         transformed: Data = x.clone()
         transformed.pos[:, 2] = normalize_time(transformed.pos[:, 2], beta=beta)
-        edges = radius_graph_pytorch(transformed.pos, radius)
+        edges = radius_graph(transformed.pos, r = radius, max_num_neighbors = 32)
         transformed.edge_index = edges
 
         transformed = filter_connected_subgraphs(transformed, min_nodes = min_nodes_subgraph)

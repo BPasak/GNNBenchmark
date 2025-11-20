@@ -32,4 +32,4 @@ rtdetr:
   postprocess:
   coco_eval:
     use_coco_eval:
-      True
+      False
