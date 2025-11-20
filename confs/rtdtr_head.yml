@@ -26,7 +26,7 @@ rtdetr:
     weight_dict:
       loss_bbox: 1.0
       loss_giou: 1.0
-      loss_ce: 1.0
+      loss_ce: 0.25
     losses:
       [boxes, labels]
   postprocess:

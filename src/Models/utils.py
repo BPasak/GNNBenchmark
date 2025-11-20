@@ -55,6 +55,8 @@ def filter_connected_subgraphs(data: Data, min_nodes: int) -> Data:
     graph = networkx.Graph(list(edge_list))
     components = networkx.connected_components(graph)
     retained_vertices = [list(component) for component in components if len(component) >= min_nodes]
+    if len(retained_vertices) == 0:
+        return Data()
     retained_vertices = np.concatenate(retained_vertices)
 
     return data.subgraph(torch.Tensor(retained_vertices).int())

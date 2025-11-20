@@ -52,7 +52,7 @@ class BatchManager(Iterator):
         samples = []
         for sample_idx in samples_idx:
             sample: PyGData = self._dataset.get_mode_data(self._mode, sample_idx)
-            if sample.num_nodes > 0:
+            if sample.num_nodes and sample.num_nodes > 0:
                 samples.append(sample)
 
         return PyGBatch.from_data_list(samples)

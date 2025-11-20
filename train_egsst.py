@@ -81,8 +81,8 @@ batch_size = 10  # Small batch size for memory constraints
 training_set = BatchManager(dataset=ncaltech, batch_size=batch_size, mode="training")
 
 # Optimizer
-optimizer = Adam(egsst.parameters(), lr=1e-3)
-scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=25, cooldown = 20)
+optimizer = Adam(egsst.parameters(), lr=2e-3)
+scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=25, cooldown = 10)
 
 # Training loop
 def train_egsst_model(model, training_set: BatchManager, optimizer, num_epochs=50):
@@ -110,7 +110,8 @@ def train_egsst_model(model, training_set: BatchManager, optimizer, num_epochs=5
 
         epoch_loss = total_loss.item()
 
-        print(f"Epoch {epoch}: mean loss = {epoch_loss:.4f}")
+        print(f"Epoch {epoch}: Learning Rate: {optimizer.param_groups[0]['lr']}")
+        print(f"Total loss: {epoch_loss:.4f}")
         if 'loss_bbox' in loss_dict:
             print(f"  - bbox_loss: {loss_dict['loss_bbox'].item():.4f}")
         if 'loss_giou' in loss_dict:
