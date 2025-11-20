@@ -72,15 +72,15 @@ class SetCriterion(nn.Module):
         targets dicts must contain the key "labels" containing a tensor of dim [nb_target_boxes]
         """
         assert 'pred_logits' in outputs
-        src_logits = outputs['pred_logits']
+        src_logits: torch.Tensor = outputs['pred_logits']
 
         idx = self._get_src_permutation_idx(indices)
         target_classes_o = torch.cat([t["labels"][J] for t, (_, J) in zip(targets, indices)])
-        target_classes = torch.full(src_logits.shape[:2], self.num_classes,
+        target_classes = torch.full(src_logits.shape[:2], self.num_classes - 1,
                                     dtype=torch.int64, device=src_logits.device)
         target_classes[idx] = target_classes_o
 
-        loss_ce = F.cross_entropy(src_logits.transpose(1, 2), target_classes, self.empty_weight)
+        loss_ce = F.cross_entropy(src_logits.transpose(1, 2), target_classes)
         losses = {'loss_ce': loss_ce}
 
         if log:

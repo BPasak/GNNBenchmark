@@ -82,7 +82,7 @@ training_set = BatchManager(dataset=ncaltech, batch_size=batch_size, mode="train
 
 # Optimizer
 optimizer = Adam(egsst.parameters(), lr=1e-3)
-scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=25, cooldown = 10, verbose=True)
+scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=25, cooldown = 20)
 
 # Training loop
 def train_egsst_model(model, training_set: BatchManager, optimizer, num_epochs=50):
@@ -115,6 +115,8 @@ def train_egsst_model(model, training_set: BatchManager, optimizer, num_epochs=5
             print(f"  - bbox_loss: {loss_dict['loss_bbox'].item():.4f}")
         if 'loss_giou' in loss_dict:
             print(f"  - giou_loss: {loss_dict['loss_giou'].item():.4f}")
+        if 'loss_ce' in loss_dict:
+            print(f"  - ce_loss: {loss_dict['loss_ce'].item():.4f}")
 
         if epoch % 20 == 0 or epoch == num_epochs - 1:
             torch.save(model.state_dict(), f"TrainedModels\egsst_trained_epoch_{epoch}.pth")
@@ -127,6 +129,6 @@ print("Starting EG-SST training...")
 print("This will train the model for object detection on NCaltech101")
 
 # Start training
-trained_model = train_egsst_model(egsst, training_set, optimizer, num_epochs=200)
+trained_model = train_egsst_model(egsst, training_set, optimizer, num_epochs=1000)
 
 print("✓ EG-SST training complete!")
