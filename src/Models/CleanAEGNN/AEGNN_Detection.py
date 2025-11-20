@@ -44,12 +44,16 @@ class AEGNN_Detection(GraphRes):
         center_y = parsed_out[1]/self.cell_map_shape[1] + self.cell_y_shift.to(out.device)
 
         out_dict = {
-            "pred_logits": parsed_out[5].reshape(center_x.shape[0], -1, self.num_classes),
+            "pred_logits": torch.cat(
+                [
+                    parsed_out[5].reshape(center_x.shape[0], -1, self.num_classes),
+                    parsed_out[4].reshape(center_x.shape[0], -1)[:, :, None],
+                ], dim = 2
+            ),
             "pred_boxes": torch.cat(
                 [center_x, center_y, parsed_out[3], parsed_out[2]],
                 dim = -1
             ).reshape(center_x.shape[0], -1, 4),
-            "pred_confidence": parsed_out[4].reshape(center_x.shape[0], -1),
         }
 
         return out_dict
@@ -62,11 +66,11 @@ class AEGNN_Detection(GraphRes):
         ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         nr_bbox = self.num_bounding_boxes
 
-        x_norm_rel = torch.clamp(model_output[..., 0:nr_bbox], min = 0)  # Center x
-        y_norm_rel = torch.clamp(model_output[..., nr_bbox:nr_bbox * 2], min = 0)  # Center y
+        x_norm_rel = model_output[..., 0:nr_bbox]  # Center x
+        y_norm_rel = model_output[..., nr_bbox:nr_bbox * 2]  # Center y
         w_norm_sqrt = torch.clamp(model_output[..., nr_bbox * 2:nr_bbox * 3], min = 0)  # Height
         h_norm_sqrt = torch.clamp(model_output[..., nr_bbox * 3:nr_bbox * 4], min = 0)  # Width
-        y_confidence = torch.sigmoid(model_output[..., nr_bbox * 4:nr_bbox * 5])  # Object Confidence
+        y_confidence = model_output[..., nr_bbox * 4:nr_bbox * 5]  # Object Confidence
         y_class_scores = model_output[..., nr_bbox * 5:]  # Class Score
 
         return x_norm_rel, y_norm_rel, w_norm_sqrt, h_norm_sqrt, y_confidence, y_class_scores
