@@ -26,8 +26,8 @@ class AEGNN_Detection(GraphRes):
         self.num_outputs_per_cell = num_classes + num_bounding_boxes * 5  # (x, y, width, height, confidence)
         num_outputs = self.num_outputs_per_cell * self.cell_map_shape[0] * self.cell_map_shape[1]
 
-        self.cell_x_shift = (torch.tensor(list(range(self.cell_map_shape[0])), requires_grad = False)/self.cell_map_shape[0])[None, :, None, None]
-        self.cell_y_shift = (torch.tensor(list(range(self.cell_map_shape[1])), requires_grad = False)/self.cell_map_shape[1])[None, None, :, None]
+        self.cell_x_shift = ((torch.tensor(list(range(self.cell_map_shape[0]))) + 0.5)/self.cell_map_shape[0])[None, :, None, None]
+        self.cell_y_shift = ((torch.tensor(list(range(self.cell_map_shape[1]))) + 0.5)/self.cell_map_shape[1])[None, None, :, None]
 
         super(AEGNN_Detection, self).__init__(
             input_shape = input_shape,
@@ -49,6 +49,7 @@ class AEGNN_Detection(GraphRes):
                 [center_x, center_y, parsed_out[3], parsed_out[2]],
                 dim = -1
             ).reshape(center_x.shape[0], -1, 4),
+            "pred_confidence": parsed_out[4].reshape(center_x.shape[0], -1),
         }
 
         return out_dict

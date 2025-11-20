@@ -1,7 +1,8 @@
 import torch
-from torch.nn.functional import l1_loss
+from torch.nn.functional import cross_entropy, l1_loss
 
 from External.EGSST_PAPER.detector.rtdetr_head.rtdetr_box_ops import box_cxcywh_to_xyxy, generalized_box_iou
+from External.EGSST_PAPER.detector.rtdetr_head.rtdetr_criterion import accuracy
 
 
 ## From the EGSST RTDETR Head Implementation
@@ -39,4 +40,21 @@ def loss_boxes(outputs, targets, indices, num_boxes):
             box_cxcywh_to_xyxy(src_boxes),
             box_cxcywh_to_xyxy(target_boxes)))
     losses['loss_giou'] = loss_giou.sum() / num_boxes
+    return losses
+
+def loss_labels(outputs, targets, indices, num_classes):
+    """Classification loss (NLL)
+    targets dicts must contain the key "labels" containing a tensor of dim [nb_target_boxes]
+    """
+    assert 'pred_logits' in outputs
+    src_logits = outputs['pred_logits']
+
+    idx = _get_src_permutation_idx(indices)
+    target_classes_o = torch.cat([t["labels"][J] for t, (_, J) in zip(targets, indices)])
+    target_classes = torch.full(src_logits.shape[:2], num_classes,
+                                dtype=torch.int64, device=src_logits.device)
+    target_classes[idx] = target_classes_o
+
+    loss_ce = cross_entropy(src_logits.transpose(1, 2), target_classes)
+    losses = {'loss_ce': loss_ce}
     return losses
