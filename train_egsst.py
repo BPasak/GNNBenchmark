@@ -2,6 +2,7 @@ import os
 
 import torch
 from torch.optim import Adam
+import matplotlib.pyplot as plt
 
 print("=== EG-SST OBJECT DETECTION TRAINING ===")
 
@@ -84,9 +85,35 @@ training_set = BatchManager(dataset=ncaltech, batch_size=batch_size, mode="train
 optimizer = Adam(egsst.parameters(), lr=2e-3)
 scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=25, cooldown = 10)
 
+
+def plot_loss_convergence(loss_list, loss_list2, loss_list3, title=f"NCaltech Loss Convergence", xlabel="Iteration", ylabel="Loss"):
+    """
+    Plots the loss over iterations to visualize convergence.
+
+    Parameters:
+    - loss_list: List or array of loss values over iterations
+    - title: Plot title
+    - xlabel: X-axis label
+    - ylabel: Y-axis label
+    """
+    plt.figure(figsize=(8,5))
+    plt.plot(loss_list, marker='o', linestyle='-', color='blue', alpha=0.7, label="classification loss")
+    plt.plot(loss_list2, marker='o', linestyle='-', color='red', alpha=0.7, label="bbox loss")
+    plt.plot(loss_list3, marker='o', linestyle='-', color='green', alpha=0.7, label="giou loss")
+    plt.title(title)
+    plt.xlabel(xlabel)
+    plt.ylabel(ylabel)
+    plt.legend()
+    plt.grid(True, linestyle='--', alpha=0.5)
+    plt.show()
+
+
 # Training loop
 def train_egsst_model(model, training_set: BatchManager, optimizer, num_epochs=50):
     model.train()
+    classification_loss_list = []
+    bbox_loss_list = []
+    giou_loss_list = []
 
     for epoch in range(num_epochs):
 
@@ -119,8 +146,14 @@ def train_egsst_model(model, training_set: BatchManager, optimizer, num_epochs=5
         if 'loss_ce' in loss_dict:
             print(f"  - ce_loss: {loss_dict['loss_ce'].item():.4f}")
 
+        classification_loss_list.append(loss_dict['loss_ce'].item())
+        bbox_loss_list.append(loss_dict['loss_bbox'].item())
+        giou_loss_list.append(loss_dict['loss_giou'].item())
+
         if epoch % 20 == 0 or epoch == num_epochs - 1:
             torch.save(model.state_dict(), f"TrainedModels\egsst_trained_epoch_{epoch}.pth")
+
+    plot_loss_convergence(classification_loss_list, bbox_loss_list, giou_loss_list)
 
     return model
 
@@ -130,6 +163,7 @@ print("Starting EG-SST training...")
 print("This will train the model for object detection on NCaltech101")
 
 # Start training
-trained_model = train_egsst_model(egsst, training_set, optimizer, num_epochs=1000)
+trained_model = train_egsst_model(egsst, training_set, optimizer, num_epochs=500)
 
 print("✓ EG-SST training complete!")
+
