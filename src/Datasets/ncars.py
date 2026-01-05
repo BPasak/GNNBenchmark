@@ -18,47 +18,64 @@ class NCars(Dataset):
             root = root,
             transform = transform,
             pre_transform = pre_transform,
-            pre_filter = pre_transform
+            pre_filter = pre_filter
         )
 
     def parse_dat_file(self, path):
-        events = []
+        import struct
 
-        with open(path, "rb") as file:
-            # skip header lines starting with %
-            while True:
-                current_pos = file.tell()
-                current_line = file.readline()
-                if not current_line:
-                    break
-                if not current_line.startswith(b'%'):
-                    file.seek(current_pos)
-                    break
-            data = file.read()
+        td_data = {'ts': [], 'x': [], 'y': [], 'p': []}
 
-        # process in batches of 8 bytes at a time
-        for i in range(0, len(data), 8):
-            if i + 8 > len(data):
-                break
-            timestamp_bytes = data[i:i+4]
-            info_bytes = data[i+4:i+8]
+        with open(path, 'rb') as f:
+            # Parse header if any (lines starting with '%')
+            num_comment_lines = 0
+            end_of_header = False
 
-            timestamp = int.from_bytes(timestamp_bytes, byteorder='little')
-            info = int.from_bytes(info_bytes, byteorder='little')
+            while not end_of_header:
+                bod = f.tell()
+                try:
+                    tline = f.readline().decode('utf-8', errors='ignore')
+                    if tline and tline[0] != '%':
+                        end_of_header = True
+                    else:
+                        num_comment_lines += 1
+                except:
+                    end_of_header = True
 
-            # load bytes as little-endian integers
-            x = info & 0x00003FFF
-            y = (info & 0x0FFFC000) >> 14
-            p = ((info & 0x10000000) >> 28)
-            p = -1 + 2 * p  # convert {0,1} to {-1,+1}
+            f.seek(bod)
 
-            events.append((x, y, timestamp, p))
+            # Read event type and size if header exists
+            ev_type = 0
+            ev_size = 8
+            if num_comment_lines > 0:
+                ev_type = struct.unpack('b', f.read(1))[0]
+                ev_size = struct.unpack('b', f.read(1))[0]
 
-        # convert to tensor
-        if events:
-            events = torch.tensor(events, dtype=torch.float)
-            x_tensor = events[:, 3].unsqueeze(1)  # feature: polarity
-            pos_tensor = events[:, :3]           # pos: x, y, timestamp
+            # Calculate number of events
+            bof = f.tell()
+            f.seek(0, 2)  # Seek to end
+            num_events = (f.tell() - bof) // ev_size
+
+            # Read data
+            f.seek(bof)
+            for _ in range(num_events):
+                timestamp = struct.unpack('<I', f.read(4))[0]
+                timestamp *= 1e-6  # us -> s
+                addr = struct.unpack('<I', f.read(4))[0]
+
+                x = (addr & 0x00003FFF) >> 0
+                y = (addr & 0x0FFFC000) >> 14
+                p = (addr & 0x10000000) >> 28
+
+                td_data['ts'].append(timestamp)
+                td_data['x'].append(x)
+                td_data['y'].append(y)
+                td_data['p'].append(p)
+
+        # Convert to tensors
+        if td_data['x']:
+            x_tensor = torch.tensor([[p] for p in td_data['p']], dtype=torch.float)
+            pos_tensor = torch.tensor([[x, y, ts] for x, y, ts in zip(td_data['x'], td_data['y'], td_data['ts'])], dtype=torch.float)
         else:
             x_tensor = torch.empty((0, 1))
             pos_tensor = torch.empty((0, 3))
@@ -105,7 +122,13 @@ class NCars(Dataset):
                 if mode == "validation" and idx % 10 != 0:
                     continue
 
-                obj_id = base_name.split("_")[1]
+                # Parse object ID from filename
+                # Files are named like: obj_004398_td.dat
+                parts = base_name.split("_")
+                if len(parts) >= 2:
+                    obj_id = parts[1]  # Get the numeric ID
+                else:
+                    obj_id = base_name  # Fallback
 
                 processed_path = os.path.join(processed_dir, f"{label_folder}_{obj_id}.pt")
                 if os.path.isfile(processed_path):
@@ -114,7 +137,7 @@ class NCars(Dataset):
                 file_path = full_file_path
                 x_tensor, pos_tensor = self.parse_dat_file(file_path)
 
-                data = torch_geometric.data.Data(x = x_tensor, pos = pos_tensor, label = label_value)
+                data = torch_geometric.data.Data(x = x_tensor, pos = pos_tensor, label = label_value, y = label_value)
 
                 if self.pre_filter and not self.pre_filter(data):
                     continue
@@ -162,7 +185,7 @@ class NCars(Dataset):
             classes = [
                 'cars', 'background'
             ],
-            image_size = (240, 180)
+            image_size = (100, 120)  # (height=100, width=120) - actual NCars sensor resolution
         )
 
 

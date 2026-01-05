@@ -119,10 +119,18 @@ class GraphRes(BaseModel):
                                         root_weight=root_weight)
                 self.norm7 = BatchNorm(in_channels=n[7])
 
-                # self.pool7 = MaxPoolingX(input_shape[:2] // 4, size=16)
-                pooling_dm_dims = torch.tensor([30., 25.], device=self.device)
-                self.pool7 = MaxPoolingX(pooling_dm_dims, size=16, img_shape=self.input_shape[:2])
-                self.fc = Linear(pooling_outputs * 16, out_features=num_outputs, bias=bias)
+                #self.pool7 = MaxPoolingX(input_shape[:2] // 4, size=16)
+                # Use dataset-specific pooling dimensions
+                if dataset == "ncars":
+                    pooling_dm_dims = torch.tensor([15., 12.5], device=self.device)  # NCars: 120x100
+                else:  # ncaltech101 or other
+                    pooling_dm_dims = torch.tensor([30., 25.], device=self.device)  # NCaltech: 180x240
+
+                # Calculate actual number of grid voxels
+                num_grids_per_dim = torch.ceil(self.input_shape[:2] / pooling_dm_dims).int()
+                num_grids_pool7 = int(num_grids_per_dim[0] * num_grids_per_dim[1])
+                self.pool7 = MaxPoolingX(pooling_dm_dims, size=num_grids_pool7, img_shape=self.input_shape[:2])
+                self.fc = Linear(pooling_outputs * num_grids_pool7, out_features=num_outputs, bias=bias)
 
             elif self.conv_type == 'gcn':
                 n = [1, 8, 16, 16, 16, 32, 32, 32, 32]
@@ -150,9 +158,17 @@ class GraphRes(BaseModel):
                 self.norm7 = BatchNorm(in_channels=n[7])
 
                 # self.pool7 = MaxPoolingX(input_shape[:2] // 4, size=16)
-                pooling_dm_dims = torch.tensor([30., 25.], device=self.device)
-                self.pool7 = MaxPoolingX(pooling_dm_dims, size=16, img_shape=self.input_shape[:2])
-                self.fc = Linear(pooling_outputs * 16, out_features=num_outputs, bias=bias)
+                # Use dataset-specific pooling dimensions
+                if dataset == "ncars":
+                    pooling_dm_dims = torch.tensor([15., 12.5], device=self.device)  # NCars: 120x100
+                else:  # ncaltech101 or other
+                    pooling_dm_dims = torch.tensor([30., 25.], device=self.device)  # NCaltech: 180x240
+
+                # Calculate actual number of grid voxels
+                num_grids_per_dim = torch.ceil(self.input_shape[:2] / pooling_dm_dims).int()
+                num_grids_pool7 = int(num_grids_per_dim[0] * num_grids_per_dim[1])
+                self.pool7 = MaxPoolingX(pooling_dm_dims, size=num_grids_pool7, img_shape=self.input_shape[:2])
+                self.fc = Linear(pooling_outputs * num_grids_pool7, out_features=num_outputs, bias=bias)
 
             elif self.conv_type == 'simple_pointnet':
                 n = [1, 8, 16, 16, 16, 32, 32, 32, 32]
@@ -173,9 +189,17 @@ class GraphRes(BaseModel):
                 self.conv7 = MyConvBNReLU(n[6], n[7])
 
                 # self.pool7 = MaxPoolingX(input_shape[:2] // 4, size=16)
-                pooling_dm_dims = torch.tensor([30., 25.], device=self.device)
-                self.pool7 = MaxPoolingX(pooling_dm_dims, size=16, img_shape=self.input_shape[:2])
-                self.fc = Linear(pooling_outputs * 16, out_features=num_outputs, bias=bias)
+                # Use dataset-specific pooling dimensions
+                if dataset == "ncars":
+                    pooling_dm_dims = torch.tensor([15., 12.5], device=self.device)  # NCars: 120x100
+                else:  # ncaltech101 or other
+                    pooling_dm_dims = torch.tensor([30., 25.], device=self.device)  # NCaltech: 180x240
+
+                # Calculate actual number of grid voxels
+                num_grids_per_dim = torch.ceil(self.input_shape[:2] / pooling_dm_dims).int()
+                num_grids_pool7 = int(num_grids_per_dim[0] * num_grids_per_dim[1])
+                self.pool7 = MaxPoolingX(pooling_dm_dims, size=num_grids_pool7, img_shape=self.input_shape[:2])
+                self.fc = Linear(pooling_outputs * num_grids_pool7, out_features=num_outputs, bias=bias)
 
             else:
                 raise ValueError(f"Other convolution type: {self.conv_type} is not supported")
@@ -324,9 +348,6 @@ class GraphRes(BaseModel):
         if self.training is True:
             with torch.no_grad():
                 data = self.trans(data)
-                # Clampe Positionen nach Random-Transforms
-                data.pos[:, 0] = torch.clamp(data.pos[:, 0], 0, self.input_shape[1] - 1)
-                data.pos[:, 1] = torch.clamp(data.pos[:, 1], 0, self.input_shape[0] - 1)
 
 
         if not self.distill:
