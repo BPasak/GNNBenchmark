@@ -52,6 +52,7 @@ class NCaltech(Dataset):
         p = np.where(p == 0, -1, p)
 
         ts = ((b3 & 0x7F) << 16) | (b4 << 8) | b5
+        ts = ts / 1e6  # ✅ CRITICAL FIX: Convert microseconds to seconds
 
         return x, y, p, ts
 
@@ -106,6 +107,22 @@ class NCaltech(Dataset):
                 print("⚠️ No matches found.")
                 continue
 
+            # ✅ ADD: Split data into train/val/test (70%/15%/15%)
+            n_total = len(common_entries)
+            n_train = int(0.70 * n_total)
+            n_val = int(0.15 * n_total)
+
+            if mode == "training":
+                common_entries = common_entries[:n_train]
+            elif mode == "validation":
+                common_entries = common_entries[n_train:n_train+n_val]
+            elif mode == "test":
+                common_entries = common_entries[n_train+n_val:]
+
+            if not common_entries:
+                print(f"⚠️ No samples for {mode} mode in {folder_name}.")
+                continue
+
             for entry in tqdm(common_entries, desc=f"{folder_name}"):
                 img_path = os.path.join(subdir_img, img_entries[entry])
                 anno_path = os.path.join(subdir_anno, anno_entries[entry])
@@ -118,6 +135,19 @@ class NCaltech(Dataset):
                 x_vals, y_vals, p, ts = self.process_event_bin(img_path)
                 events = np.stack([x_vals, y_vals, ts, p], axis=1)
                 events = torch.from_numpy(events).float()
+
+                # ✅ ADD: Extract 50ms temporal window around peak activity (like original evgnn)
+                window_s = 0.050  # 50 milliseconds
+                if events.shape[0] > 100:  # Only if enough events
+                    # Find middle timestamp (peak activity region)
+                    middle_idx = events.shape[0] // 2
+                    middle_time = events[middle_idx, 2].item()
+
+                    # Extract events in window
+                    time_mask = (events[:, 2] >= middle_time - window_s/2) & \
+                                (events[:, 2] <= middle_time + window_s/2)
+                    events = events[time_mask]
+
                 x, pos = events[:, -1:], events[:, :3]  # polarity as feature, xyz/time as pos
 
                 # --- Process annotation bin ---
