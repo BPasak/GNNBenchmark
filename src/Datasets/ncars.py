@@ -4,6 +4,8 @@ import torch_geometric
 from torch_geometric.data import Data as PyGData
 from typing import List, Union, Callable
 
+from tqdm.auto import tqdm
+
 from Datasets.base import Dataset, DatasetMode, DatasetInformation
 
 
@@ -106,7 +108,7 @@ class NCars(Dataset):
                 continue
 
             files = sorted(os.listdir(full_path))
-            for idx, file_name in enumerate(files):
+            for idx, file_name in tqdm(enumerate(files), total = len(files), desc = f"{mode} ({label_folder})"):
                 # Only handle regular files with a .dat extension (case-insensitive)
                 full_file_path = os.path.join(full_path, file_name)
                 if not os.path.isfile(full_file_path):

@@ -78,6 +78,8 @@ class NCaltech(Dataset):
 
 
     def __process_mode__(self, mode: DatasetMode) -> None:
+        if mode != 'training':
+            return
         processed_dir = os.path.join(self.root, 'processed', mode)
         os.makedirs(processed_dir, exist_ok=True)
 
