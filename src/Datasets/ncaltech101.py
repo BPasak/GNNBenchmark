@@ -121,8 +121,11 @@ class NCaltech(Dataset):
                 # --- Process annotation bin ---
                 bbox, obj_contour = self.process_annotation_bin(anno_path)
                
+                # Get class index for the label
+                class_idx = self.get_info().classes.index(folder_name)
+
                 # --- Create Data object ---
-                data = PyGData(x=x, pos=pos, label=folder_name)
+                data = PyGData(x=x, pos=pos, label=folder_name, y=class_idx)
                 data.bbox = bbox
                 data.obj_contour = obj_contour
                 

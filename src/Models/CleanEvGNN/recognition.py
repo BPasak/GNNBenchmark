@@ -150,9 +150,6 @@ class RecognitionModel(pl.LightningModule):
     ) -> PyGData:
         x.x = torch.where(x.x == -1., 0., x.x)
 
-        # Clampe Positionen VOR dem Sampling
-        x.pos[:, 0] = torch.clamp(x.pos[:, 0], 0, self.model.input_shape[1] - 1)
-        x.pos[:, 1] = torch.clamp(x.pos[:, 1], 0, self.model.input_shape[0] - 1)
 
         x = sub_sampling(x, n_samples=n_samples, sub_sample=sampling)
         x.pos[:, 2] = normalize_time(x.pos[:, 2], beta=beta)

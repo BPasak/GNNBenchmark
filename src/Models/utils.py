@@ -43,6 +43,11 @@ def normalize_time(t: Tensor, beta: float) -> Tensor:
     """
     Normalize timestamps: t* = beta * (t - t0)
     """
+    # If the input tensor is empty, return it unchanged (avoids reduction errors).
+    # This can happen when a sample contains no points after subsampling or filtering.
+    if t.numel() == 0:
+        return t
+
     t0 = t.min()
     return beta * (t - t0)
 

@@ -35,6 +35,10 @@ def fixed_voxel_grid(pos: Tensor, full_shape: Tensor, size: Tensor, batch: Tenso
     # according to node's pos, calculating its idx (x,y,z,...) in grids
     idx = torch.div(pos, size, rounding_mode='floor')
 
+    # Clamp grid indices to valid range to handle positions at/beyond boundaries
+    # This is necessary because data may have positions slightly outside [0, full_shape)
+    for i in range(node_dims):
+        idx[:, i] = torch.clamp(idx[:, i], 0, num_grids[i] - 1)
 
     # batch is natually the batch_size idx; transposition for later matmul
     idx = torch.cat([idx, batch.view(-1,1)], dim=1).T
