@@ -4,6 +4,7 @@ import functools
 import os
 from typing import Callable, List, Tuple, Union
 
+import random
 import numpy as np
 import torch
 from torch_geometric.data import Data as PyGData
@@ -79,8 +80,6 @@ class NCaltech(Dataset):
 
 
     def __process_mode__(self, mode: DatasetMode) -> None:
-        if mode != 'training':
-            return
         processed_dir = os.path.join(self.root, 'processed', mode)
         os.makedirs(processed_dir, exist_ok=True)
 
@@ -107,17 +106,19 @@ class NCaltech(Dataset):
                 print("⚠️ No matches found.")
                 continue
 
-            # ✅ ADD: Split data into train/val/test (70%/15%/15%)
+            random.seed(1234)
+            random.shuffle(common_entries)
+
             n_total = len(common_entries)
-            n_train = int(0.70 * n_total)
-            n_val = int(0.15 * n_total)
+            n_train = int(0.80 * n_total)
+            n_val = int(0.10 * n_total)
 
             if mode == "training":
                 common_entries = common_entries[:n_train]
             elif mode == "validation":
-                common_entries = common_entries[n_train:n_train+n_val]
+                common_entries = common_entries[n_train:n_train + n_val]
             elif mode == "test":
-                common_entries = common_entries[n_train+n_val:]
+                common_entries = common_entries[n_train + n_val:]
 
             if not common_entries:
                 print(f"⚠️ No samples for {mode} mode in {folder_name}.")
@@ -128,7 +129,7 @@ class NCaltech(Dataset):
                 anno_path = os.path.join(subdir_anno, anno_entries[entry])
 
                 processed_sequence_path = os.path.join(processed_dir, f"{folder_name}_{entry}.pt")
-                if os.path.isfile(processed_sequence_path):
+                if os.path.exists(processed_sequence_path):
                     continue
 
                 # --- Process event bin ---

@@ -1,4 +1,6 @@
 import os
+
+import numpy as np
 import torch
 import torch_geometric
 from torch_geometric.data import Data as PyGData
@@ -47,10 +49,8 @@ class NCars(Dataset):
             f.seek(bod)
 
             # Read event type and size if header exists
-            ev_type = 0
             ev_size = 8
             if num_comment_lines > 0:
-                ev_type = struct.unpack('b', f.read(1))[0]
                 ev_size = struct.unpack('b', f.read(1))[0]
 
             # Calculate number of events
@@ -68,6 +68,8 @@ class NCars(Dataset):
                 x = (addr & 0x00003FFF) >> 0
                 y = (addr & 0x0FFFC000) >> 14
                 p = (addr & 0x10000000) >> 28
+
+                p = -1 if p == 0 else 1
 
                 td_data['ts'].append(timestamp)
                 td_data['x'].append(x)
@@ -139,7 +141,7 @@ class NCars(Dataset):
                 file_path = full_file_path
                 x_tensor, pos_tensor = self.parse_dat_file(file_path)
 
-                data = torch_geometric.data.Data(x = x_tensor, pos = pos_tensor, label = label_value, y = label_value)
+                data = torch_geometric.data.Data(x = x_tensor, pos = pos_tensor, label = label_folder, y = label_value)
 
                 if self.pre_filter and not self.pre_filter(data):
                     continue

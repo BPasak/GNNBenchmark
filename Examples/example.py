@@ -5,19 +5,20 @@ from torch.nn import CrossEntropyLoss
 from torch.optim import AdamW
 from tqdm.auto import tqdm
 
+from Benchmarks.ModelTester import ModelTester
 from Datasets.batching import BatchManager
 from src.utils.resultsVisualization import plot_with_moving_mean
 
 # Changeable Parameters
 
 ## NCars
-dataset_name = "NCars"
-dataset_path = r"D:\Uniwersytet\GNNBenchmarking\Datasets\NCars\Prophesee_Dataset_n_cars"
+# dataset_name = "NCars"
+# dataset_path = r"D:\Uniwersytet\GNNBenchmarking\Datasets\NCars\Prophesee_Dataset_n_cars"
 # dataset_path = r'/Users/mielgeraats/Documents/Master Artificial Intelligence/Master Project 1/Datasets/Prophesee_Dataset_n_cars'
 
 ## NCaltech
-# dataset_name = "NCaltech"
-# dataset_path = r"D:\Uniwersytet\GNNBenchmarking\Datasets\NCaltech"
+dataset_name = "NCaltech"
+dataset_path = r"D:\Uniwersytet\GNNBenchmarking\Datasets\NCaltech"
 # dataset_path = r"/Users/mielgeraats/Documents/Master Artificial Intelligence/Master Project 1/Datasets/N-Caltech101"
 
 # model_name = "AEGNN"
@@ -102,6 +103,18 @@ dataset.process()
 
 print(f"Dataset Processed.")
 
+# Assessing Model's performance Metrics
+print("Assessing Model's performance Metrics...")
+model_tester = ModelTester(
+    results_path = f"../Results/ModelPerformance_{model.__class__.__name__}.txt",
+    model = model
+)
+
+model_tester.test_model_performance(
+    data = [dataset.get_mode_data('training', i) for i in range(100)],
+    batch_sizes = [1,2,4,8],
+)
+
 # Model Training Initialization
 training_set = BatchManager(
     dataset=dataset,
@@ -110,7 +123,7 @@ training_set = BatchManager(
 )
 
 optimizer = AdamW(model.parameters(), lr=lr, weight_decay=1e-7)
-scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=250, cooldown = 25)
+scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=100, cooldown = 25)
 loss_fn = CrossEntropyLoss()
 
 classes = dataset.get_info().classes
@@ -142,11 +155,11 @@ for i in range(epochs):
 
 print("Training Complete.")
 
-torch.save(model.state_dict(), f"../TrainedModels/model_{dataset.get_info().name}.pth")
+torch.save(model.state_dict(), f"../Results/TrainedModels/model_{dataset.get_info().name}.pth")
 
 print("Model Saved.")
 
-plot_with_moving_mean(losses, title = f"{dataset_name} Training Loss", window=10, xlabel="Epoch", ylabel="Loss")
+plot_with_moving_mean(losses, title = f"{dataset_name} Training Loss", window=50, xlabel="Epoch", ylabel="Loss")
 
 # Assess Accuracy
 print("Assessing Accuracy...")
