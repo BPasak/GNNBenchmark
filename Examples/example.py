@@ -1,4 +1,6 @@
+import os
 from functools import partial
+from pathlib import Path
 
 import torch
 from torch.nn import CrossEntropyLoss
@@ -12,22 +14,26 @@ from src.utils.resultsVisualization import plot_with_moving_mean
 # Changeable Parameters
 
 ## NCars
-# dataset_name = "NCars"
+dataset_name = "NCars"
+dataset_path = r'/home/benio/Documents/Datasets/NCars'
 # dataset_path = r"D:\Uniwersytet\GNNBenchmarking\Datasets\NCars\Prophesee_Dataset_n_cars"
 # dataset_path = r'/Users/mielgeraats/Documents/Master Artificial Intelligence/Master Project 1/Datasets/Prophesee_Dataset_n_cars'
 
 ## NCaltech
-dataset_name = "NCaltech"
-dataset_path = r"D:\Uniwersytet\GNNBenchmarking\Datasets\NCaltech"
+# dataset_name = "NCaltech"
+# dataset_path = r"D:\Uniwersytet\GNNBenchmarking\Datasets\NCaltech"
 # dataset_path = r"/Users/mielgeraats/Documents/Master Artificial Intelligence/Master Project 1/Datasets/N-Caltech101"
 
 # model_name = "AEGNN"
 model_name = "graph_res"
 
 ## Training Parameters
-epochs = 1000
+epochs = 100
 batch_size = 8
 lr = 5e-4
+
+# Output Directory
+output_dir = Path(f"../Results/{model_name}_on_{dataset_name}")
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
@@ -106,7 +112,7 @@ print(f"Dataset Processed.")
 # Assessing Model's performance Metrics
 print("Assessing Model's performance Metrics...")
 model_tester = ModelTester(
-    results_path = f"../Results/ModelPerformance_{model.__class__.__name__}.txt",
+    results_path = output_dir,
     model = model
 )
 
@@ -139,27 +145,34 @@ def label_to_index(lbl):
 print("Starting Training...")
 model.train()
 
-losses = []
-for i in range(epochs):
-    examples = next(training_set).to(device)
-    reference = torch.tensor([label_to_index(lbl) for lbl in examples.label], dtype=torch.long).to(device)
-    out = model(examples)
-    loss = loss_fn(out, reference)
-    loss.backward()
-    optimizer.step()
-    scheduler.step(loss)
-    print(f"Iteration {i} | learning rate: {optimizer.param_groups[0]['lr']:.2e} | loss: {loss.item()} ")
-    losses.append(loss.item())
+os.makedirs(output_dir / "TrainedModels", exist_ok=True)
 
-    optimizer.zero_grad()
+losses = []
+with model_tester:
+    for i in range(epochs):
+        examples = next(training_set).to(device)
+        reference = torch.tensor([label_to_index(lbl) for lbl in examples.label], dtype=torch.long).to(device)
+        out = model(examples)
+        loss = loss_fn(out, reference)
+        loss.backward()
+        optimizer.step()
+        scheduler.step(loss.item())
+        print(f"Iteration {i} | learning rate: {optimizer.param_groups[0]['lr']:.2e} | loss: {loss.item()} ")
+        losses.append(loss.item())
+
+        optimizer.zero_grad()
 
 print("Training Complete.")
 
-torch.save(model.state_dict(), f"../Results/TrainedModels/model_{dataset.get_info().name}.pth")
+torch.save(model.state_dict(), output_dir / f"TrainedModels" / "final_trained_model.pth")
 
 print("Model Saved.")
 
 plot_with_moving_mean(losses, title = f"{dataset_name} Training Loss", window=50, xlabel="Epoch", ylabel="Loss")
+
+print("\n")
+model_tester.print_power_consumption()
+print("\n\n")
 
 # Assess Accuracy
 print("Assessing Accuracy...")
