@@ -154,9 +154,6 @@ class NCars(Dataset):
         if modes is None:
             modes = ['training', 'validation', 'test']
 
-        processed_dir = os.path.join(self.root, 'processed')
-        os.makedirs(processed_dir, exist_ok = True)
-
         for mode in modes:
             self.__process_mode__(mode)
     
@@ -174,20 +171,12 @@ class NCars(Dataset):
     def __getitem__(self, idx) -> PyGData:
         return self.get_mode_data(*idx)
     
-    @property
-    def raw_file_names(self):
-        return []
-
-    @property
-    def processed_file_names(self):
-        return []
-    
     @staticmethod
     def get_info() -> DatasetInformation:
         return DatasetInformation(
             name = "NCars",
             classes = [
-                'cars', 'background'
+                'background', 'cars'
             ],
             image_size = (100, 120)  # (height=100, width=120) - actual NCars sensor resolution
         )
