@@ -1,4 +1,5 @@
 import os
+import sys
 import random
 from datetime import datetime
 from pathlib import Path
@@ -97,12 +98,14 @@ class ModelTester:
                 f.write(f'   {sum(times) / len(times):.2f} | {np.std(times):.2f} | {max(times):.2f} | {min(times):.2f}\n')
 
     def __enter__(self):
-        driver = parsers.JsonParser(str(self._get_power_consumption_path()))
-        exp = experiment.Experiment(driver)
-        self.p, self.q = exp.measure_yourself(period=1, measurement_period=1)
+        if sys.platform == "linux":
+            driver = parsers.JsonParser(str(self._get_power_consumption_path()))
+            exp = experiment.Experiment(driver)
+            self.p, self.q = exp.measure_yourself(period=1, measurement_period=1)
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        self.q.put(experiment.STOP_MESSAGE)
+        if sys.platform == "linux":
+            self.q.put(experiment.STOP_MESSAGE)
 
     def _power_consumption_results_exist(self) -> bool:
         return os.path.exists(self._get_power_consumption_path() / "power_metrics.json")
