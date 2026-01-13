@@ -23,6 +23,15 @@ import time
 import psutil
 import gc
 
+#convType="ori_aegnn"
+convType="fuse"
+preTrainedModel = "evgnn_ncaltech_fuse.pth"
+#dataset = "ncars"
+dataset = "ncaltech"
+numSamples = 100
+eventsPerSample = 1000
+
+
 project_root = os.path.abspath(os.path.dirname(__file__))
 src_path = os.path.join(project_root, 'src')
 if src_path not in sys.path:
@@ -49,13 +58,13 @@ from torch_geometric.transforms import Cartesian
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Comprehensive metrics evaluation for EvGNN models')
-    parser.add_argument('--model', type=str, default='evgnn_ncars_fuse2.pth',
+    parser.add_argument('--model', type=str, default=preTrainedModel,
                         help='Model filename in results/TrainedModels/')
-    parser.add_argument('--dataset', type=str, default='ncars', choices=['ncars', 'ncaltech'],
+    parser.add_argument('--dataset', type=str, default=dataset, choices=['ncars', 'ncaltech'],
                         help='Dataset to use')
     parser.add_argument('--dataset-path', type=str, default=None,
                         help='Path to dataset (if not specified, uses defaults)')
-    parser.add_argument('--num-samples', type=int, default=100,
+    parser.add_argument('--num-samples', type=int, default=numSamples,
                         help='Number of test samples to evaluate')
     parser.add_argument('--device', type=str, default='cpu', choices=['cpu', 'cuda', 'mps'],
                         help='Device to use')
@@ -71,7 +80,7 @@ def parse_args():
                         help='Time normalization beta')
     parser.add_argument('--output-dir', type=str, default='results/async_metrics',
                         help='Directory to save results')
-    parser.add_argument('--events-per-sample', type=int, default=1000,
+    parser.add_argument('--events-per-sample', type=int, default=eventsPerSample,
                         help='Number of events to process per sample for async metrics')
 
     return parser.parse_args()
@@ -91,7 +100,7 @@ def load_dataset(args):
         image_size = NCars.get_info().image_size
     elif args.dataset == 'ncaltech':
         if args.dataset_path is None:
-            args.dataset_path = r'/Users/hannes/Documents/University/Datasets/raw_ncaltech'
+            args.dataset_path = r'/Users/hannes/Documents/University/Datasets/raw_ncaltec'
         dataset_obj = NCaltech(root=args.dataset_path)
         num_classes = len(NCaltech.get_info().classes)
         image_size = NCaltech.get_info().image_size
@@ -122,7 +131,7 @@ def load_model(args, num_classes, image_size, device):
         num_classes=num_classes,
         img_shape=img_shape,
         dim=3,
-        conv_type="fuse",
+        conv_type=convType,
         distill=False
     ).to(device)
 
@@ -332,6 +341,9 @@ def evaluate_asynchronous_metrics(model, test_loader, num_samples, args, device)
     print("ASYNCHRONOUS EVALUATION METRICS")
     print("="*70)
 
+    # Create edge_attributes function for SplineConv (same as used in AEGNN)
+    edge_attributes = Cartesian(norm=True, cat=False)
+
     # Convert to async
     print("Converting model to asynchronous mode...")
     async_model = make_model_asynchronous(
@@ -339,6 +351,7 @@ def evaluate_asynchronous_metrics(model, test_loader, num_samples, args, device)
         r=args.radius,
         max_num_neighbors=args.max_num_neighbors,
         max_dt=args.max_dt,
+        edge_attributes=edge_attributes,
         log_flops=False,
         log_runtime=False
     )
@@ -381,7 +394,9 @@ def evaluate_asynchronous_metrics(model, test_loader, num_samples, args, device)
                     event_new = Data(
                         x=x_new,
                         pos=pos_new,
-                        batch=torch.zeros(1, dtype=torch.long)
+                        batch=torch.zeros(1, dtype=torch.long),
+                        edge_index=torch.empty((2, 0), dtype=torch.long),
+                        edge_attr=torch.empty((0, 3), dtype=torch.float)
                     ).to(device)
 
                     # Measure per-event metrics
@@ -682,7 +697,7 @@ def main():
     elif args.device == 'cuda' and torch.cuda.is_available():
         device = torch.device('cuda')
     else:
-        device = torch.device('cpu')
+       device = torch.device('cpu')
     print(f"Using device: {device}")
 
     # Load dataset

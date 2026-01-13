@@ -42,6 +42,24 @@ def __graph_initialization(module, x: torch.Tensor, edge_index: Adj = None, edge
         else:
             y = module.sync_forward(x, pos=module.pos_all, edge_index=module.edge_new)
 
+    elif module.conv_type == 'spline':
+        # Handle SplineConv - requires x, edge_index, edge_attr
+        if module.edge_new.numel() == 0:
+            # No edges yet, return zero output
+            y = torch.zeros((x.shape[0], module.out_channels), device=x.device, dtype=x.dtype)
+        else:
+            # Compute edge_attr for edges using Cartesian transform (like original AEGNN)
+            if module.asy_edge_attributes is not None:
+                temp_data = Data(pos=module.pos_all, edge_index=module.edge_new)
+                edge_attr = module.asy_edge_attributes(temp_data).edge_attr
+            elif edge_attr is None or edge_attr.size(0) != module.edge_new.size(1):
+                # Fallback: compute edge attributes from positions
+                from torch_geometric.transforms import Cartesian
+                temp_data = Data(pos=module.pos_all, edge_index=module.edge_new)
+                edge_attr_fn = Cartesian(cat=False, max_value=10.0)
+                temp_data = edge_attr_fn(temp_data)
+                edge_attr = temp_data.edge_attr
+            y = module.sync_forward(x, module.edge_new, edge_attr)
 
     module.asy_graph = Data(x=x, pos=module.pos_all, edge_index=module.edge_new, edge_attr=edge_attr, y=y)
 
@@ -89,6 +107,27 @@ def __graph_processing(module, x: torch.Tensor, edge_index = None, edge_attr: to
         else:
             y_update = module.sync_forward(x=module.asy_graph.x, pos=module.pos_all, edge_index=module.edge_new)
             y_new = y_update[module.idx_new, :].unsqueeze(0)
+
+    elif module.conv_type == 'spline':
+        if module.edge_new.numel() == 0:
+            # No edges, return zero output for new node
+            y_new = torch.zeros((1, module.out_channels), device=x.device, dtype=x.dtype)
+        else:
+            # Compute edge_attr for new edges using Cartesian transform (like original AEGNN)
+            if module.asy_edge_attributes is not None:
+                temp_data = Data(pos=module.pos_all, edge_index=module.edge_new)
+                new_edge_attr = module.asy_edge_attributes(temp_data).edge_attr
+            else:
+                from torch_geometric.transforms import Cartesian
+                temp_data = Data(pos=module.pos_all, edge_index=module.edge_new)
+                edge_attr_fn = Cartesian(cat=False, max_value=10.0)
+                temp_data = edge_attr_fn(temp_data)
+                new_edge_attr = temp_data.edge_attr
+            # Update stored edge_attr
+            module.asy_graph.edge_attr = new_edge_attr
+            y_update = module.sync_forward(module.asy_graph.x, module.edge_new, new_edge_attr)
+            y_new = y_update[module.idx_new, :].unsqueeze(0)
+
     module.asy_graph.y = torch.cat([module.asy_graph.y, y_new], dim=0)
 
 
