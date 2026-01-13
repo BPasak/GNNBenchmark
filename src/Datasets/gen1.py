@@ -66,9 +66,20 @@ class Gen1(Dataset):
                     and os.path.exists(sample_path + "_bbox.npy")):
 
                     x_tensor, pos_tensor = self.parse_dat_file(sample_path + "_td.dat")
-                    boxes = np.load(sample_path + "_bbox.npy") # TODO: Timestamps are in microseconds -> translate to seconds
+                    boxes = np.load(sample_path + "_bbox.npy") # If this code is modified, consider that timestamps are in microseconds.
 
-                    data = PyGData(x = x_tensor, pos = pos_tensor, boxes = boxes)
+                    # Transforming boxes to yolo format grouped by boxes timestamp
+                    transformed_boxes = {}
+                    for time in set(boxes["ts"]):
+                        b = boxes[boxes["ts"] == time]
+                        x_center_norm = (b["x"] + b["w"] / 2) / self.get_info().image_size[0]
+                        y_center_norm = (b["y"] + b["h"] / 2) / self.get_info().image_size[1]
+                        w_norm = b["w"] / self.get_info().image_size[0]
+                        h_norm = b["h"] / self.get_info().image_size[1]
+
+                        transformed_boxes[float(time) / 1e6] = torch.tensor(np.array([b["class_id"], x_center_norm, y_center_norm, w_norm, h_norm])).T
+
+                    data = PyGData(x = x_tensor, pos = pos_tensor, bbox = transformed_boxes)
                     torch.save(data, os.path.join(processed_dir, f"{sample}.pt"))
 
     def process(self, modes: List[DatasetMode] | None = None) -> None:

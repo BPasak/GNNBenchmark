@@ -1,0 +1,35 @@
+dataset:
+  current_dataset: ncaltech
+
+rtdetr:
+  uniform:
+    #hidden_dim - 256
+    #nhead - 8
+    #dim_feedforward-1024
+    #dropout=0.0
+    #feat_strides=[8, 16, 32]
+    #eval_spatial_size=None
+  hybrid_encoder:
+  decoder:
+    num_classes: 2
+  matcher:
+    weight_dict:
+      cost_class: 0.5
+      cost_bbox: 0.5
+      cost_giou: 0.5
+      loss_ce: 0.5
+    #use_focal_loss=False
+    #alpha=0.25
+    #gamma=2.0
+  criterion:
+    num_classes: 1
+    weight_dict:
+      loss_bbox: 1.0
+      loss_giou: 1.0
+      loss_ce: 1.0
+    losses:
+      [boxes, labels]
+  postprocess:
+  coco_eval:
+    use_coco_eval:
+      False
