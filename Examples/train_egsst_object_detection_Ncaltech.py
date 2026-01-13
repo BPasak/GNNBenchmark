@@ -14,8 +14,6 @@ os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
 # sys.path.insert(0, project_path)
 # sys.path.insert(0, os.path.join(project_path, 'src'))
 
-
-
 # Imports
 from src.Models.EGSST.EGSST import EGSST
 from src.Datasets.batching import BatchManager
@@ -151,7 +149,7 @@ def train_egsst_model(model, training_set: BatchManager, optimizer, num_epochs=5
         giou_loss_list.append(loss_dict['loss_giou'].item())
 
         if epoch % 20 == 0 or epoch == num_epochs - 1:
-            torch.save(model.state_dict(), f"TrainedModels\egsst_trained_epoch_{epoch}.pth")
+            torch.save(model.state_dict(), f"Results\TrainedModels\egsst_trained_epoch_{epoch}.pth")
 
     plot_loss_convergence(classification_loss_list, bbox_loss_list, giou_loss_list)
 
