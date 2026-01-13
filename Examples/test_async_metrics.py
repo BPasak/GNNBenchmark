@@ -55,6 +55,15 @@ from src.Models.utils import normalize_time, sub_sampling
 from torch_geometric.nn.pool import radius_graph
 from torch_geometric.transforms import Cartesian
 
+# ModelTester is optional - only available on Linux with AIPowerMeter installed
+try:
+    from src.Benchmarks.ModelTester import ModelTester
+    MODEL_TESTER_AVAILABLE = True
+except ImportError:
+    MODEL_TESTER_AVAILABLE = False
+    print("⚠️  ModelTester not available (AIPowerMeter not installed)")
+    print("   Power consumption measurement will be skipped.")
+
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Comprehensive metrics evaluation for EvGNN models')
@@ -369,7 +378,6 @@ def evaluate_asynchronous_metrics(model, test_loader, num_samples, args, device)
         torch.cuda.empty_cache()
 
     events_to_process = min(args.events_per_sample, args.n_samples)
-
     for i in tqdm(range(num_samples), desc="Async inference"):
         try:
             sample = next(test_loader)
@@ -467,7 +475,162 @@ def evaluate_asynchronous_metrics(model, test_loader, num_samples, args, device)
     return metrics, predictions, targets
 
 
-def save_results(args, sync_metrics, async_metrics, param_metrics):
+def evaluate_power_consumption(model, dataset_obj, args, device):
+    """Evaluate power consumption during inference using ModelTester.
+
+    Measures power consumption for both:
+    - Synchronous inference (batch processing)
+    - Asynchronous inference (per-event processing)
+
+    Note: Power measurement only works on Linux systems.
+    On other platforms, it will only measure model performance metrics.
+    """
+    print("\n" + "="*70)
+    print("POWER CONSUMPTION EVALUATION")
+    print("="*70)
+
+    if not MODEL_TESTER_AVAILABLE:
+        print("⚠️  ModelTester not available (AIPowerMeter not installed).")
+        print("   Skipping power consumption measurement.")
+        return None
+
+    if sys.platform != "linux":
+        print("⚠️  Power measurement is only available on Linux.")
+        print("   Skipping power consumption measurement.")
+        print("   (Model performance metrics will still be evaluated)")
+        return None
+
+    # Create output directory for power results
+    power_output_dir = os.path.join(args.output_dir, "power_consumption")
+    os.makedirs(power_output_dir, exist_ok=True)
+
+    # Initialize ModelTester for synchronous evaluation
+    sync_power_dir = os.path.join(power_output_dir, "synchronous")
+    os.makedirs(sync_power_dir, exist_ok=True)
+    model_tester_sync = ModelTester(
+        results_path=sync_power_dir,
+        model=model
+    )
+
+    # Get some test data for performance testing
+    print("Preparing test data for power measurement...")
+    test_data = []
+    for i in range(min(100, args.num_samples)):
+        sample = dataset_obj.get_mode_data('test', i)
+        sample = transform_sample(sample, args, device)
+        test_data.append(sample)
+
+    # Test model performance (graph construction and inference latency)
+    print("Testing model performance...")
+    model_tester_sync.test_model_performance(
+        data=test_data,
+        batch_sizes=[1, 2, 4, 8],
+        test_sizes=[25, 25, 25, 25]
+    )
+
+    # ========== SYNCHRONOUS POWER MEASUREMENT ==========
+    print("\n--- Synchronous Inference Power Measurement ---")
+    print("(Running 50 synchronous inference iterations...)")
+
+    model.eval()
+    with model_tester_sync:
+        with torch.no_grad():
+            for i in range(50):
+                sample = test_data[i % len(test_data)]
+                _ = model(sample)
+
+    sync_power_metrics = None
+    if model_tester_sync._power_consumption_results_exist():
+        print("✓ Synchronous power consumption measured")
+        model_tester_sync.print_power_consumption()
+        try:
+            sync_power_metrics = model_tester_sync.summarize_power_consumption()
+        except Exception as e:
+            print(f"⚠️  Could not summarize sync power consumption: {e}")
+
+    # ========== ASYNCHRONOUS POWER MEASUREMENT ==========
+    print("\n--- Asynchronous Inference Power Measurement ---")
+    print("(Measuring power during per-event processing...)")
+
+    # Create edge_attributes function for SplineConv
+    edge_attributes = Cartesian(norm=True, cat=False)
+
+    # Convert to async mode
+    async_model = make_model_asynchronous(
+        model,
+        r=args.radius,
+        max_num_neighbors=args.max_num_neighbors,
+        max_dt=args.max_dt,
+        edge_attributes=edge_attributes,
+        log_flops=False,
+        log_runtime=False
+    )
+
+    # Initialize ModelTester for async evaluation
+    async_power_dir = os.path.join(power_output_dir, "asynchronous")
+    os.makedirs(async_power_dir, exist_ok=True)
+    model_tester_async = ModelTester(
+        results_path=async_power_dir,
+        model=async_model
+    )
+
+    # Measure power during async per-event processing
+    events_to_process = min(args.events_per_sample, 1000)  # Limit for power measurement
+    num_samples_for_power = min(5, len(test_data))  # Use fewer samples but process events
+
+    print(f"Processing {events_to_process} events per sample for {num_samples_for_power} samples...")
+
+    with model_tester_async:
+        with torch.no_grad():
+            for sample_idx in range(num_samples_for_power):
+                sample = test_data[sample_idx]
+                reset_async_module(async_model)
+
+                num_events = min(sample.num_nodes, events_to_process)
+
+                for event_idx in range(num_events):
+                    x_new = sample.x[event_idx:event_idx+1]
+                    pos_new = sample.pos[event_idx:event_idx+1, :3]
+
+                    event_new = Data(
+                        x=x_new,
+                        pos=pos_new,
+                        batch=torch.zeros(1, dtype=torch.long),
+                        edge_index=torch.empty((2, 0), dtype=torch.long),
+                        edge_attr=torch.empty((0, 3), dtype=torch.float)
+                    ).to(device)
+
+                    _ = async_model(event_new)
+
+    async_power_metrics = None
+    if model_tester_async._power_consumption_results_exist():
+        print("✓ Asynchronous power consumption measured")
+        model_tester_async.print_power_consumption()
+        try:
+            async_power_metrics = model_tester_async.summarize_power_consumption()
+        except Exception as e:
+            print(f"⚠️  Could not summarize async power consumption: {e}")
+
+    # Combine results
+    power_metrics = {
+        'synchronous': sync_power_metrics,
+        'asynchronous': async_power_metrics,
+        'async_config': {
+            'events_per_sample': events_to_process,
+            'num_samples': num_samples_for_power,
+            'total_events_processed': events_to_process * num_samples_for_power
+        }
+    }
+
+    if sync_power_metrics is None and async_power_metrics is None:
+        print("\n⚠️  No power consumption data collected.")
+        print("   This usually means the power measurement library is not available.")
+        return None
+
+    return power_metrics
+
+
+def save_results(args, sync_metrics, async_metrics, param_metrics, power_metrics=None):
     """Save all metrics to disk"""
     print("\n" + "="*70)
     print("SAVING RESULTS")
@@ -488,6 +651,7 @@ def save_results(args, sync_metrics, async_metrics, param_metrics):
         'parameters': param_metrics,
         'synchronous': sync_metrics,
         'asynchronous': async_metrics,
+        'power_consumption': power_metrics,
         'configuration': {
             'radius': args.radius,
             'max_num_neighbors': args.max_num_neighbors,
@@ -734,8 +898,11 @@ def main():
         model, test_loader, num_samples, args, device
     )
 
+    # Evaluate power consumption (only works on Linux)
+    power_metrics = evaluate_power_consumption(model, dataset_obj, args, device)
+
     # Save results
-    base_name = save_results(args, sync_metrics, async_metrics, param_metrics)
+    base_name = save_results(args, sync_metrics, async_metrics, param_metrics, power_metrics)
 
     # Visualize
     visualize_results(args, base_name, sync_metrics, async_metrics)
