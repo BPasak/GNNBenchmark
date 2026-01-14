@@ -110,9 +110,20 @@ def train_egsst_model(model, training_set: BatchManager, optimizer, num_epochs=5
         targets = []
         for i in range(batch.num_graphs):
             graph_data = batch.get_example(i)
-            targets.append(graph_data.bbox[None, :1, :])
+            targets.append(graph_data.bbox[None, :, :])
 
-        targets_tensor = torch.concat(targets).to(device)  # [B, 1, 5]
+        largest_size = 0
+        for target in targets:
+            largest_size = max(largest_size, target.shape[1])
+
+        # padding the targets with boxes of classes "no object"
+        for idx, target in enumerate(targets):
+            size = target.shape[1]
+            targets[idx] = torch.concat([target, torch.zeros((1, largest_size - size, 5)).to(device)], dim=1)
+            if size < largest_size:
+                targets[idx][:, size + 1:, 0] = len(gen1.get_info().classes) + 1
+
+        targets_tensor = torch.concat(targets).to(device)  # [B, M, 5]
 
         # ---- forward + backward ----
         optimizer.zero_grad()
