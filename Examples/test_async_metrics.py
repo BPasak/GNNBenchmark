@@ -23,13 +23,13 @@ import time
 import psutil
 import gc
 
-#convType="ori_aegnn"
-convType="fuse"
-preTrainedModel = "evgnn_ncaltech_fuse.pth"
-#dataset = "ncars"
-dataset = "ncaltech"
-numSamples = 100
-eventsPerSample = 1000
+convType="ori_aegnn"
+#convType="fuse"
+preTrainedModel = "evgnn_ncars_ori_aegnn.pth"
+dataset = "ncars"
+#dataset = "ncaltech"
+numSamples = 10
+eventsPerSample = 100
 
 
 project_root = os.path.abspath(os.path.dirname(__file__))
@@ -48,6 +48,8 @@ import matplotlib.pyplot as plt
 
 from src.Models.CleanEvGNN.recognition import RecognitionModel as EvGNN
 from src.Models.CleanEvGNN.asyncronous import make_model_asynchronous, reset_async_module
+from src.Models.CleanEvGNN.asyncronous_aegnn import make_model_asynchronous as make_model_asynchronous_aegnn
+from src.Models.CleanEvGNN.asyncronous_aegnn import reset_async_module as reset_async_module_aegnn
 from src.Datasets.ncars import NCars
 from src.Datasets.ncaltech101 import NCaltech
 from src.Datasets.batching import BatchManager
@@ -353,17 +355,34 @@ def evaluate_asynchronous_metrics(model, test_loader, num_samples, args, device)
     # Create edge_attributes function for SplineConv (same as used in AEGNN)
     edge_attributes = Cartesian(norm=True, cat=False)
 
-    # Convert to async
-    print("Converting model to asynchronous mode...")
-    async_model = make_model_asynchronous(
-        model,
-        r=args.radius,
-        max_num_neighbors=args.max_num_neighbors,
-        max_dt=args.max_dt,
-        edge_attributes=edge_attributes,
-        log_flops=False,
-        log_runtime=False
-    )
+    # Choose the appropriate async converter based on conv_type
+    if convType == 'ori_aegnn':
+        print("Using AEGNN-style asynchronous processing (supports SplineConv)")
+        make_async_fn = make_model_asynchronous_aegnn
+        reset_async_fn = reset_async_module_aegnn
+        # AEGNN async doesn't use max_num_neighbors or max_dt
+        async_model = make_async_fn(
+            model,
+            r=args.radius,
+            edge_attributes=edge_attributes,
+            log_flops=False,
+            log_runtime=False
+        )
+    else:
+        print("Using standard asynchronous processing")
+        make_async_fn = make_model_asynchronous
+        reset_async_fn = reset_async_module
+        # Standard async uses all parameters
+        async_model = make_async_fn(
+            model,
+            r=args.radius,
+            max_num_neighbors=args.max_num_neighbors,
+            max_dt=args.max_dt,
+            edge_attributes=edge_attributes,
+            log_flops=False,
+            log_runtime=False
+        )
+
     print("✓ Model converted")
 
     per_event_latencies = []
@@ -386,8 +405,8 @@ def evaluate_asynchronous_metrics(model, test_loader, num_samples, args, device)
             target = sample.y.item()
             all_targets.append(target)
 
-            # Reset async model
-            reset_async_module(async_model)
+            # Reset async model with appropriate function
+            reset_async_fn(async_model)
 
             num_events = min(sample.num_nodes, events_to_process)
 
@@ -555,16 +574,33 @@ def evaluate_power_consumption(model, dataset_obj, args, device):
     # Create edge_attributes function for SplineConv
     edge_attributes = Cartesian(norm=True, cat=False)
 
-    # Convert to async mode
-    async_model = make_model_asynchronous(
-        model,
-        r=args.radius,
-        max_num_neighbors=args.max_num_neighbors,
-        max_dt=args.max_dt,
-        edge_attributes=edge_attributes,
-        log_flops=False,
-        log_runtime=False
-    )
+    # Choose the appropriate async converter based on conv_type
+    if convType == 'ori_aegnn':
+        print("Using AEGNN-style asynchronous processing for power measurement")
+        make_async_fn = make_model_asynchronous_aegnn
+        reset_async_fn = reset_async_module_aegnn
+        # AEGNN async doesn't use max_num_neighbors or max_dt
+        async_model = make_async_fn(
+            model,
+            r=args.radius,
+            edge_attributes=edge_attributes,
+            log_flops=False,
+            log_runtime=False
+        )
+    else:
+        print("Using standard asynchronous processing for power measurement")
+        make_async_fn = make_model_asynchronous
+        reset_async_fn = reset_async_module
+        # Standard async uses all parameters
+        async_model = make_async_fn(
+            model,
+            r=args.radius,
+            max_num_neighbors=args.max_num_neighbors,
+            max_dt=args.max_dt,
+            edge_attributes=edge_attributes,
+            log_flops=False,
+            log_runtime=False
+        )
 
     # Initialize ModelTester for async evaluation
     async_power_dir = os.path.join(power_output_dir, "asynchronous")
@@ -584,7 +620,7 @@ def evaluate_power_consumption(model, dataset_obj, args, device):
         with torch.no_grad():
             for sample_idx in range(num_samples_for_power):
                 sample = test_data[sample_idx]
-                reset_async_module(async_model)
+                reset_async_fn(async_model)
 
                 num_events = min(sample.num_nodes, events_to_process)
 
