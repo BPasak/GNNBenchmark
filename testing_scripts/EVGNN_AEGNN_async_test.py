@@ -1,7 +1,5 @@
 """
 Comprehensive Metrics Evaluation Script for Trained EvGNN Models
-For each sample only tests first 10000 events for asynchronous metrics.
-(That is adjustable via --events-per-sample adn can cause accuracy differences if set too low.)
 
 This script evaluates various performance metrics of trained models:
 - Mean Average Precision (mAP)
@@ -11,25 +9,52 @@ This script evaluates various performance metrics of trained models:
 - Per-event latency and memory (async mode)
 - Graph construction latency (sync mode)
 
-Usage:
-    python test_async_metrics.py --model evgnn_ncars_fuse2.pth --dataset ncars
-    python test_async_metrics.py --model evgnn_ncars_fuse.pth --dataset ncars --num-samples 10
+Configuration: Edit the variables in the CONFIGURATION section below.
 """
+
+# ============================================================================
+# CONFIGURATION - Edit these variables to configure the evaluation
+# ============================================================================
+
+# Model Configuration
+CONV_TYPE = "ori_aegnn"  # "ori_aegnn" or "fuse"
+MODEL_NAME = "evgnn_ncars_ori_aegnn.pth"  # Model filename
+MODEL_PATH = "../results/TrainedModels"  # Path to trained models
+
+# Dataset Configuration
+DATASET = "ncars"  # "ncars" or "ncaltech"
+DATASET_PATHS = {
+    "ncars": r"/Users/hannes/Documents/University/Datasets/raw_ncars/Prophesee_Dataset_n_cars",
+    "ncaltech": r"/Users/hannes/Documents/University/Datasets/raw_ncaltech"
+}
+
+# Evaluation Configuration
+NUM_SAMPLES = 10  # Number of test samples to evaluate
+EVENTS_PER_SAMPLE = 100  # Number of events to process per sample for async metrics
+N_EVENTS_SAMPLE = 10000  # Number of events to sample per recording
+
+# Output Configuration
+OUTPUT_DIR = "../results/async_test_results"  # Directory to save results (same location as models)
+
+# Graph Construction Parameters
+RADIUS = 3.0  # Radius for graph construction
+MAX_NUM_NEIGHBORS = 16  # Max neighbors in graph
+MAX_DT = 66000  # Max time difference for edges
+BETA = 0.5e-5  # Time normalization beta
+
+# Device Configuration
+DEVICE = "cpu"  # "cpu", "cuda", or "mps"
+
+# ============================================================================
+# END CONFIGURATION
+# ============================================================================
 
 import sys
 import os
-import argparse
 import time
 import psutil
 import gc
 
-convType="ori_aegnn"
-#convType="fuse"
-preTrainedModel = "evgnn_ncars_ori_aegnn.pth"
-dataset = "ncars"
-#dataset = "ncaltech"
-numSamples = 10
-eventsPerSample = 100
 
 
 project_root = os.path.abspath(os.path.dirname(__file__))
@@ -67,34 +92,22 @@ except ImportError:
     print("   Power consumption measurement will be skipped.")
 
 
-def parse_args():
-    parser = argparse.ArgumentParser(description='Comprehensive metrics evaluation for EvGNN models')
-    parser.add_argument('--model', type=str, default=preTrainedModel,
-                        help='Model filename in results/TrainedModels/')
-    parser.add_argument('--dataset', type=str, default=dataset, choices=['ncars', 'ncaltech'],
-                        help='Dataset to use')
-    parser.add_argument('--dataset-path', type=str, default=None,
-                        help='Path to dataset (if not specified, uses defaults)')
-    parser.add_argument('--num-samples', type=int, default=numSamples,
-                        help='Number of test samples to evaluate')
-    parser.add_argument('--device', type=str, default='cpu', choices=['cpu', 'cuda', 'mps'],
-                        help='Device to use')
-    parser.add_argument('--radius', type=float, default=3.0,
-                        help='Radius for graph construction')
-    parser.add_argument('--max-num-neighbors', type=int, default=16,
-                        help='Max neighbors in graph')
-    parser.add_argument('--max-dt', type=int, default=66000,
-                        help='Max time difference for edges')
-    parser.add_argument('--n-samples', type=int, default=10000,
-                        help='Number of events to sample per recording')
-    parser.add_argument('--beta', type=float, default=0.5e-5,
-                        help='Time normalization beta')
-    parser.add_argument('--output-dir', type=str, default='results/async_metrics',
-                        help='Directory to save results')
-    parser.add_argument('--events-per-sample', type=int, default=eventsPerSample,
-                        help='Number of events to process per sample for async metrics')
-
-    return parser.parse_args()
+# Create a simple config object from the configuration variables
+class Config:
+    """Configuration object to replace argparse args"""
+    def __init__(self):
+        self.model = MODEL_NAME
+        self.dataset = DATASET
+        self.dataset_path = DATASET_PATHS.get(DATASET)
+        self.num_samples = NUM_SAMPLES
+        self.device = DEVICE
+        self.radius = RADIUS
+        self.max_num_neighbors = MAX_NUM_NEIGHBORS
+        self.max_dt = MAX_DT
+        self.n_samples = N_EVENTS_SAMPLE
+        self.beta = BETA
+        self.output_dir = OUTPUT_DIR
+        self.events_per_sample = EVENTS_PER_SAMPLE
 
 
 def load_dataset(args):
@@ -104,14 +117,10 @@ def load_dataset(args):
     print("="*70)
 
     if args.dataset == 'ncars':
-        if args.dataset_path is None:
-            args.dataset_path = r'/Users/hannes/Documents/University/Datasets/raw_ncars/Prophesee_Dataset_n_cars'
         dataset_obj = NCars(root=args.dataset_path)
         num_classes = len(NCars.get_info().classes)
         image_size = NCars.get_info().image_size
     elif args.dataset == 'ncaltech':
-        if args.dataset_path is None:
-            args.dataset_path = r'/Users/hannes/Documents/University/Datasets/raw_ncaltec'
         dataset_obj = NCaltech(root=args.dataset_path)
         num_classes = len(NCaltech.get_info().classes)
         image_size = NCaltech.get_info().image_size
@@ -122,6 +131,7 @@ def load_dataset(args):
     num_test_samples = dataset_obj.get_mode_length("test")
 
     print(f"Dataset: {args.dataset}")
+    print(f"Path: {args.dataset_path}")
     print(f"Classes: {num_classes}")
     print(f"Image size: {image_size}")
     print(f"Test samples: {num_test_samples}")
@@ -142,11 +152,11 @@ def load_model(args, num_classes, image_size, device):
         num_classes=num_classes,
         img_shape=img_shape,
         dim=3,
-        conv_type=convType,
+        conv_type=CONV_TYPE,
         distill=False
     ).to(device)
 
-    model_path = os.path.join('../results/TrainedModels', args.model)
+    model_path = os.path.join(MODEL_PATH, args.model)
     if not os.path.exists(model_path):
         raise FileNotFoundError(f"Model not found: {model_path}")
 
@@ -356,7 +366,7 @@ def evaluate_asynchronous_metrics(model, test_loader, num_samples, args, device)
     edge_attributes = Cartesian(norm=True, cat=False)
 
     # Choose the appropriate async converter based on conv_type
-    if convType == 'ori_aegnn':
+    if CONV_TYPE == 'ori_aegnn':
         print("Using AEGNN-style asynchronous processing (supports SplineConv)")
         make_async_fn = make_model_asynchronous_aegnn
         reset_async_fn = reset_async_module_aegnn
@@ -587,7 +597,7 @@ def evaluate_power_consumption(model, dataset_obj, args, device, num_classes, im
     edge_attributes = Cartesian(norm=True, cat=False)
 
     # Choose the appropriate async converter based on conv_type
-    if convType == 'ori_aegnn':
+    if CONV_TYPE == 'ori_aegnn':
         print("Using AEGNN-style asynchronous processing for power measurement")
         make_async_fn = make_model_asynchronous_aegnn
         reset_async_fn = reset_async_module_aegnn
@@ -893,7 +903,7 @@ def print_summary(sync_metrics, async_metrics, param_metrics):
 
 
 def main():
-    args = parse_args()
+    args = Config()  # Use configuration from top of script instead of argparse
 
     print("="*70)
     print("COMPREHENSIVE METRICS EVALUATION")

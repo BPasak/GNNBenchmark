@@ -339,7 +339,7 @@ for event_idx in range(num_events):
 When you run your test:
 
 ```bash
-python test_async_metrics.py
+python EVGNN_AEGNN_async_test.py
 ```
 
 **You should see:**

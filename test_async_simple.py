@@ -2,7 +2,7 @@
 Simple test script for EvGNN Asynchronous Processing
 
 Usage:
-1. First train a model: Run EVGNN_results.ipynb
+1. First train a model: Run EVGNN_AEGNN_training.ipynb
 2. Then run this script: python test_async_simple.py
 """
 
@@ -70,7 +70,7 @@ if os.path.exists(model_path):
 else:
     print(f"⚠️  WARNING: No trained model found at {model_path}")
     print(f"⚠️  Using UNTRAINED model - results will be random!")
-    print(f"⚠️  Please train a model first using EVGNN_results.ipynb")
+    print(f"⚠️  Please train a model first using EVGNN_AEGNN_training.ipynb")
     print()
 
 evgnn.eval()
@@ -171,5 +171,5 @@ if os.path.exists(model_path):
     print("\n✅ Test completed successfully!")
 else:
     print("\n⚠️  Test completed but using untrained model")
-    print("   Train a model first with EVGNN_results.ipynb for meaningful results")
+    print("   Train a model first with EVGNN_AEGNN_training.ipynb for meaningful results")
 
