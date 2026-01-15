@@ -494,12 +494,20 @@ def evaluate_asynchronous_metrics(model, test_loader, num_samples, args, device)
     return metrics, predictions, targets
 
 
-def evaluate_power_consumption(model, dataset_obj, args, device):
+def evaluate_power_consumption(model, dataset_obj, args, device, num_classes, image_size):
     """Evaluate power consumption during inference using ModelTester.
 
     Measures power consumption for both:
     - Synchronous inference (batch processing)
     - Asynchronous inference (per-event processing)
+
+    Args:
+        model: The SYNCHRONOUS model (will not be modified)
+        dataset_obj: Dataset object
+        args: Arguments
+        device: Device to use
+        num_classes: Number of classes (needed to load fresh model for async)
+        image_size: Image size (needed to load fresh model for async)
 
     Note: Power measurement only works on Linux systems.
     On other platforms, it will only measure model performance metrics.
@@ -571,6 +579,10 @@ def evaluate_power_consumption(model, dataset_obj, args, device):
     print("\n--- Asynchronous Inference Power Measurement ---")
     print("(Measuring power during per-event processing...)")
 
+    # Load a fresh model for async power measurement
+    print("Loading fresh model for async power measurement...")
+    model_for_async_power = load_model(args, num_classes, image_size, device)
+
     # Create edge_attributes function for SplineConv
     edge_attributes = Cartesian(norm=True, cat=False)
 
@@ -581,7 +593,7 @@ def evaluate_power_consumption(model, dataset_obj, args, device):
         reset_async_fn = reset_async_module_aegnn
         # AEGNN async doesn't use max_num_neighbors or max_dt
         async_model = make_async_fn(
-            model,
+            model_for_async_power,  # ← Use the FRESH model, not the input!
             r=args.radius,
             edge_attributes=edge_attributes,
             log_flops=False,
@@ -593,7 +605,7 @@ def evaluate_power_consumption(model, dataset_obj, args, device):
         reset_async_fn = reset_async_module
         # Standard async uses all parameters
         async_model = make_async_fn(
-            model,
+            model_for_async_power,  # ← Use the FRESH model, not the input!
             r=args.radius,
             max_num_neighbors=args.max_num_neighbors,
             max_dt=args.max_dt,
@@ -929,13 +941,23 @@ def main():
     # Reset data loader
     test_loader = BatchManager(dataset=dataset_obj, batch_size=1, mode="test")
 
-    # Evaluate asynchronous metrics
+    # Load a fresh model for async evaluation
+    print("\n" + "="*70)
+    print("LOADING FRESH MODEL FOR ASYNC EVALUATION")
+    print("="*70)
+    print("(Async conversion modifies the model, so loading a separate instance...)")
+    model_async = load_model(args, num_classes, image_size, device)
+
+    # Evaluate asynchronous metrics with the fresh model
     async_metrics, async_preds, async_targets = evaluate_asynchronous_metrics(
-        model, test_loader, num_samples, args, device
+        model_async, test_loader, num_samples, args, device
     )
 
-    # Evaluate power consumption (only works on Linux)
-    power_metrics = evaluate_power_consumption(model, dataset_obj, args, device)
+    # Evaluate power consumption with the ORIGINAL synchronous model
+    # (The original 'model' variable still has the synchronous forward method)
+    power_metrics = evaluate_power_consumption(
+        model, dataset_obj, args, device, num_classes, image_size
+    )
 
     # Save results
     base_name = save_results(args, sync_metrics, async_metrics, param_metrics, power_metrics)
