@@ -1,0 +1,67 @@
+{
+  "model": "evgnn_ncars_fuse.pth",
+  "dataset": "ncars",
+  "num_samples": 100,
+  "device": "cpu",
+  "parameters": {
+    "total_parameters": 6608,
+    "trainable_parameters": 6608,
+    "total_parameters_millions": 0.006608,
+    "trainable_parameters_millions": 0.006608
+  },
+  "synchronous": {
+    "accuracy": 0.87,
+    "mean_average_precision": 0.87,
+    "inference_latency_ms": {
+      "mean": 13.986592059372924,
+      "std": 11.11400810800213,
+      "min": 1.606083009392023,
+      "max": 51.72191699966788,
+      "p50": 9.829999995417893,
+      "p95": 34.12157853308598,
+      "p99": 49.1286941926228
+    },
+    "preprocessing_latency_ms": {
+      "mean": 6.279205842292868,
+      "std": 5.73395047043537
+    },
+    "graph_construction_latency_ms": {
+      "mean": 5.36915703152772,
+      "std": 5.3078003291723395
+    },
+    "memory_footprint_mb": {
+      "initial": 393.9375,
+      "final": 819.09375,
+      "delta": 425.15625,
+      "per_sample_mean": 3.95296875
+    }
+  },
+  "asynchronous": {
+    "accuracy": 0.61,
+    "mean_average_precision": 0.7880434782608696,
+    "successful_samples": 100,
+    "failed_samples": 0,
+    "per_event_latency_ms": {
+      "mean": 1.3368943319447157,
+      "std": 0.6550573883172607,
+      "min": 0.36404101410880685,
+      "max": 28.10641599353403,
+      "p50": 1.141957996878773,
+      "p95": 2.6659672090318036,
+      "p99": 3.6330007982905963
+    },
+    "per_event_memory_mb": {
+      "mean": 0.00020870775393332013,
+      "std": 0.026207335300960016
+    }
+  },
+  "power_consumption": null,
+  "configuration": {
+    "radius": 3.0,
+    "max_num_neighbors": 16,
+    "max_dt": 66000,
+    "n_samples": 100000,
+    "beta": 5e-06,
+    "events_per_sample": 100000
+  }
+}

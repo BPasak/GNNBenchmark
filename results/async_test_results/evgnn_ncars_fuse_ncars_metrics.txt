@@ -1,0 +1,32 @@
+======================================================================
+COMPREHENSIVE METRICS EVALUATION
+======================================================================
+
+Model: evgnn_ncars_fuse.pth
+Dataset: ncars
+Samples: 100
+
+MODEL PARAMETERS
+----------------------------------------------------------------------
+Total parameters: 6,608 (0.01M)
+Trainable parameters: 6,608 (0.01M)
+
+SYNCHRONOUS INFERENCE
+----------------------------------------------------------------------
+Accuracy: 0.8700
+Mean Average Precision: 0.8700
+Inference latency (mean): 13.99 ms
+Inference latency (std): 11.11 ms
+Inference latency (p95): 34.12 ms
+Preprocessing latency: 6.28 ms
+Graph construction latency: 5.37 ms
+Memory footprint (delta): 425.16 MB
+
+ASYNCHRONOUS PROCESSING
+----------------------------------------------------------------------
+Accuracy: 0.6100
+Mean Average Precision: 0.7880
+Per-event latency (mean): 1.3369 ms
+Per-event latency (std): 0.6551 ms
+Per-event latency (p95): 2.6660 ms
+Per-event memory (mean): 0.0002 MB
