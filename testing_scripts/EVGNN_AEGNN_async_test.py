@@ -17,8 +17,8 @@ Configuration: Edit the variables in the CONFIGURATION section below.
 # ============================================================================
 
 # Model Configuration
-CONV_TYPE = "ori_aegnn"  # "ori_aegnn" or "fuse"
-MODEL_NAME = "evgnn_ncars_ori_aegnn.pth"  # Model filename
+CONV_TYPE = "fuse"  # "ori_aegnn" or "fuse"
+MODEL_NAME = "evgnn_ncars_fuse.pth"  # Model filename
 MODEL_PATH = "../results/TrainedModels"  # Path to trained models
 
 # Dataset Configuration
@@ -29,9 +29,9 @@ DATASET_PATHS = {
 }
 
 # Evaluation Configuration
-NUM_SAMPLES = 10  # Number of test samples to evaluate
-EVENTS_PER_SAMPLE = 100  # Number of events to process per sample for async metrics
-N_EVENTS_SAMPLE = 10000  # Number of events to sample per recording
+NUM_SAMPLES = 100  # Number of test samples to evaluate
+EVENTS_PER_SAMPLE = 100000  # Number of events to process per sample for async metrics
+N_EVENTS_SAMPLE = 100000  # Number of events to sample per recording
 
 # Output Configuration
 OUTPUT_DIR = "../results/async_test_results"  # Directory to save results (same location as models)
