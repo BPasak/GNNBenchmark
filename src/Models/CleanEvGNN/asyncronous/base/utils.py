@@ -55,7 +55,7 @@ def pos_dist(pos: torch.Tensor, p = 1.0) -> torch.Tensor:
     num_nodes = pos.shape[0]
     node_distance = []
     for i in range(num_nodes):
-        d = cdist(pos, pos[i, :], p=p) # p-norm, default: L1 norm
+        d = cdist(pos, pos[i:i+1, :], p=p) # p-norm, default: L1 norm (keep 2D for cdist)
         node_distance.append(d)
     node_distances = torch.cat(node_distance, dim=0)
     return node_distances
@@ -111,12 +111,13 @@ def find_new_edges_cylinder(idx_new, pos_new, pos_all, r = 3.0, max_dt = 50000, 
 
 @torch.no_grad()
 def causal_radius_graph(data_pos: torch.Tensor, r: float, p: float = 1.0, max_num_neighbors: int = 32, reserve_future_edges: bool = True) -> torch.LongTensor:
-    # device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
-    torch.cuda.empty_cache()
+    # Use the device from the input tensor
     pos = data_pos.clone().detach()
-    pos = pos.to('cuda')
-
     device = pos.device
+
+    # Only clear CUDA cache if using CUDA
+    if device.type == 'cuda':
+        torch.cuda.empty_cache()
     num_nodes = pos.shape[0]
 
     # allowed edges to connect older nodes; reserve some edges for future nodes
@@ -169,12 +170,13 @@ def causal_radius_graph(data_pos: torch.Tensor, r: float, p: float = 1.0, max_nu
 
 @torch.no_grad()
 def hugnet_graph(data_pos: torch.Tensor, r: float, p: float = 1.0, max_num_neighbors: int = 32, self_loops: bool = False) -> torch.LongTensor:
-    # device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
-    torch.cuda.empty_cache()
+    # Use the device from the input tensor
     pos = data_pos.clone().detach()
-    pos = pos.to('cuda')
-
     device = pos.device
+
+    # Only clear CUDA cache if using CUDA
+    if device.type == 'cuda':
+        torch.cuda.empty_cache()
     num_nodes = pos.shape[0]
 
     # calculate collection distance
@@ -211,12 +213,13 @@ def hugnet_graph(data_pos: torch.Tensor, r: float, p: float = 1.0, max_num_neigh
 
 @torch.no_grad()
 def hugnet_graph_cylinder(data_pos: torch.Tensor, r: float, max_dt: int = 50000, p: float = 1.0, max_num_neighbors: int = 32, self_loops: bool = False) -> torch.LongTensor:
-    # device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
-    torch.cuda.empty_cache()
+    # Use the device from the input tensor
     pos = data_pos.clone().detach()
-    pos = pos.to('cuda')
-
     device = pos.device
+
+    # Only clear CUDA cache if using CUDA
+    if device.type == 'cuda':
+        torch.cuda.empty_cache()
     num_nodes = pos.shape[0]
 
     # calculate collection distance of (x,y)

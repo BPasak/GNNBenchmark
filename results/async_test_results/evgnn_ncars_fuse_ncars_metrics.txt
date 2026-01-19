@@ -13,20 +13,20 @@ Trainable parameters: 6,608 (0.01M)
 
 SYNCHRONOUS INFERENCE
 ----------------------------------------------------------------------
-Accuracy: 0.8700
-Mean Average Precision: 0.8700
-Inference latency (mean): 13.99 ms
-Inference latency (std): 11.11 ms
-Inference latency (p95): 34.12 ms
-Preprocessing latency: 6.28 ms
-Graph construction latency: 5.37 ms
-Memory footprint (delta): 425.16 MB
+Accuracy: 0.8400
+Mean Average Precision: 0.8455
+Inference latency (mean): 13.18 ms
+Inference latency (std): 12.99 ms
+Inference latency (p95): 36.26 ms
+Preprocessing latency: 6.39 ms
+Graph construction latency: 5.46 ms
+Memory footprint (delta): 410.67 MB
 
 ASYNCHRONOUS PROCESSING
 ----------------------------------------------------------------------
-Accuracy: 0.6100
-Mean Average Precision: 0.7880
-Per-event latency (mean): 1.3369 ms
-Per-event latency (std): 0.6551 ms
-Per-event latency (p95): 2.6660 ms
+Accuracy: 0.6400
+Mean Average Precision: 0.8022
+Per-event latency (mean): 1.1734 ms
+Per-event latency (std): 0.4745 ms
+Per-event latency (p95): 2.0790 ms
 Per-event memory (mean): 0.0002 MB

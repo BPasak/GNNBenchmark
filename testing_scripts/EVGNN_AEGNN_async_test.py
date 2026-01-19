@@ -29,9 +29,9 @@ DATASET_PATHS = {
 }
 
 # Evaluation Configuration
-NUM_SAMPLES = 100  # Number of test samples to evaluate
-EVENTS_PER_SAMPLE = 100000  # Number of events to process per sample for async metrics
-N_EVENTS_SAMPLE = 100000  # Number of events to sample per recording
+NUM_SAMPLES = 500  # Number of test samples to evaluate
+EVENTS_PER_SAMPLE = 5000  # Number of events to process per sample for async metrics
+N_EVENTS_SAMPLE = 10000  # Number of events to sample per recording
 
 # Output Configuration
 OUTPUT_DIR = "../results/async_test_results"  # Directory to save results (same location as models)
@@ -202,11 +202,11 @@ def transform_sample(sample, args, device):
     # Normalize time
     sample.pos[:, 2] = normalize_time(sample.pos[:, 2], beta=args.beta)
 
-    # Build graph
+    # Build graph using standard radius_graph (hugnet_graph_cylinder is for async only)
     sample.edge_index = radius_graph(sample.pos, r=args.radius, max_num_neighbors=args.max_num_neighbors)
 
     # Add edge attributes
-    edge_attr_fn = Cartesian(cat=False, max_value=10.0)
+    edge_attr_fn = Cartesian(cat=False, max_value=args.radius)  # Use radius, not 10.0
     sample.edge_attr = edge_attr_fn(sample).edge_attr
 
     return sample
@@ -402,6 +402,9 @@ def evaluate_asynchronous_metrics(model, test_loader, num_samples, args, device)
     successful_samples = 0
     failed_samples = 0
 
+    # Track predictions at each event for accuracy evolution
+    predictions_per_event = []  # List of lists: [sample_idx][event_idx] -> prediction
+
     gc.collect()
     if device.type == 'cuda':
         torch.cuda.empty_cache()
@@ -422,6 +425,7 @@ def evaluate_asynchronous_metrics(model, test_loader, num_samples, args, device)
 
             sample_latencies = []
             sample_memory = []
+            sample_predictions = []  # Track predictions for each event in this sample
 
             with torch.no_grad():
                 for event_idx in range(num_events):
@@ -448,12 +452,16 @@ def evaluate_asynchronous_metrics(model, test_loader, num_samples, args, device)
                     sample_latencies.append((event_end - event_start) * 1000)
                     sample_memory.append(mem_after - mem_before)
 
+                    # Store prediction at this event
+                    pred = torch.argmax(output, dim=-1).item()
+                    sample_predictions.append(pred)
+
                     if event_idx == num_events - 1:
-                        pred = torch.argmax(output, dim=-1).item()
                         all_predictions.append(pred)
 
             per_event_latencies.extend(sample_latencies)
             per_event_memory.extend(sample_memory)
+            predictions_per_event.append(sample_predictions)
             successful_samples += 1
 
         except (IndexError, RuntimeError) as e:
@@ -463,6 +471,7 @@ def evaluate_asynchronous_metrics(model, test_loader, num_samples, args, device)
             # Add default prediction for failed sample
             if len(all_targets) > len(all_predictions):
                 all_predictions.append(0)  # Default to class 0
+            predictions_per_event.append([0])  # Default prediction list
             continue
 
     # Compute metrics
@@ -472,6 +481,35 @@ def evaluate_asynchronous_metrics(model, test_loader, num_samples, args, device)
 
     num_classes = len(np.unique(targets))
     map_score = compute_map(predictions, targets, num_classes)
+
+    # Calculate accuracy evolution over events
+    # Find the maximum number of events across all samples
+    max_events = max(len(preds) for preds in predictions_per_event)
+
+    # Pad predictions to the same length and compute accuracy at each event index
+    accuracy_evolution = []
+    for event_idx in range(max_events):
+        correct = 0
+        total = 0
+        for sample_idx, sample_preds in enumerate(predictions_per_event):
+            if event_idx < len(sample_preds):
+                # Use prediction at this event
+                pred = sample_preds[event_idx]
+                total += 1
+            elif len(sample_preds) > 0:
+                # Use last available prediction if we've gone past this sample's events
+                pred = sample_preds[-1]
+                total += 1
+            else:
+                continue
+
+            if pred == all_targets[sample_idx]:
+                correct += 1
+
+        if total > 0:
+            accuracy_evolution.append(correct / total)
+        else:
+            accuracy_evolution.append(0.0)
 
     metrics = {
         'accuracy': float(accuracy),
@@ -490,7 +528,9 @@ def evaluate_asynchronous_metrics(model, test_loader, num_samples, args, device)
         'per_event_memory_mb': {
             'mean': float(np.mean(per_event_memory)),
             'std': float(np.std(per_event_memory))
-        }
+        },
+        'accuracy_evolution': accuracy_evolution,
+        'max_events_processed': max_events
     }
 
     print(f"\n✓ Asynchronous metrics computed")
@@ -772,6 +812,7 @@ def visualize_results(args, base_name, sync_metrics, async_metrics):
     print("GENERATING VISUALIZATIONS")
     print("="*70)
 
+    # Create main comparison figure
     fig, axes = plt.subplots(2, 3, figsize=(18, 12))
     fig.suptitle(f'Performance Metrics: {args.model} on {args.dataset}', fontsize=16, fontweight='bold')
 
@@ -870,6 +911,54 @@ def visualize_results(args, base_name, sync_metrics, async_metrics):
     print(f"✓ Visualization saved to: {plot_path}")
 
     plt.close()
+
+    # Create separate accuracy evolution plot (similar to reference image)
+    if 'accuracy_evolution' in async_metrics:
+        fig, ax = plt.subplots(figsize=(10, 6))
+
+        accuracy_evolution = async_metrics['accuracy_evolution']
+        events = range(len(accuracy_evolution))
+
+        # Plot accuracy evolution
+        ax.plot(events, accuracy_evolution, linewidth=2.5, color='#2196F3', label='Model (simulation)')
+
+        # Add final accuracy point (like the star in reference image)
+        final_accuracy = async_metrics['accuracy']
+        final_event = len(accuracy_evolution) - 1
+        ax.plot(final_event, final_accuracy, marker='*', markersize=20,
+                color='#FFA726', markeredgecolor='black', markeredgewidth=1.5,
+                label=f'Final accuracy: {final_accuracy:.3f}')
+
+        ax.set_xlabel('Events', fontsize=12)
+        ax.set_ylabel('Accuracy', fontsize=12)
+        ax.set_title('Accuracy Evolution During Asynchronous Processing', fontsize=14, fontweight='bold')
+        ax.grid(True, alpha=0.3)
+        ax.legend(fontsize=11)
+        ax.set_ylim([0, 1.0])
+
+        # Add text annotation for final accuracy
+        ax.annotate(f'{final_accuracy:.3f}',
+                   xy=(final_event, final_accuracy),
+                   xytext=(final_event * 0.85, final_accuracy * 0.95),
+                   fontsize=10,
+                   bbox=dict(boxstyle='round,pad=0.5', facecolor='yellow', alpha=0.7),
+                   arrowprops=dict(arrowstyle='->', connectionstyle='arc3,rad=0.3'))
+
+        plt.tight_layout()
+
+        accuracy_plot_path = os.path.join(args.output_dir, f"{base_name}_accuracy_evolution.png")
+        plt.savefig(accuracy_plot_path, dpi=300, bbox_inches='tight')
+        print(f"✓ Accuracy evolution plot saved to: {accuracy_plot_path}")
+
+        # Also save the accuracy evolution data as CSV
+        csv_path = os.path.join(args.output_dir, f"{base_name}_accuracy_evolution.csv")
+        with open(csv_path, 'w') as f:
+            f.write("event_index,accuracy\n")
+            for idx, acc in enumerate(accuracy_evolution):
+                f.write(f"{idx},{acc:.6f}\n")
+        print(f"✓ Accuracy evolution data saved to: {csv_path}")
+
+        plt.close()
 
 
 def print_summary(sync_metrics, async_metrics, param_metrics):

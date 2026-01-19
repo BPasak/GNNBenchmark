@@ -21,4 +21,10 @@ def graph_new_nodes(module, x: torch.Tensor) -> Tuple[torch.Tensor, torch.LongTe
 
 
 def compute_edges(module, pos: torch.Tensor) -> torch.LongTensor:
+    """Compute edges for graph construction.
+
+    Uses simple radius_graph for spatial-only edge construction.
+    For temporal-aware edge construction, the AEGNN approach computes edges
+    on-the-fly during the async update based on radius around new events.
+    """
     return radius_graph(pos, r=module.asy_radius, max_num_neighbors=pos.size()[0])
