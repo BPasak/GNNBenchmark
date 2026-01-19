@@ -1,5 +1,5 @@
 dataset:
-  current_dataset: ncaltech
+  current_dataset: gen1
 
 rtdetr:
   uniform:
@@ -30,6 +30,9 @@ rtdetr:
     losses:
       [boxes, labels]
   postprocess:
+    num_classes: 2
+    use_focal_loss: False
+    num_top_queries: 2
   coco_eval:
     use_coco_eval:
       False

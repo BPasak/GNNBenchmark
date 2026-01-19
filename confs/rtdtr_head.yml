@@ -30,6 +30,9 @@ rtdetr:
     losses:
       [boxes, labels]
   postprocess:
+    num_classes: 102
+    use_focal_loss: False
+    use_nms: False
   coco_eval:
     use_coco_eval:
       False
