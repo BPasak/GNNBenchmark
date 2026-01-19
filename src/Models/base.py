@@ -18,12 +18,3 @@ class BaseModel(torch.nn.Module, abc.ABC):
     @abc.abstractmethod
     def data_transform(self, x: PyGData, **kwargs) -> PyGData:
         pass
-
-    @abc.abstractmethod
-    def graph_update(
-        self,
-        x: PyGData,
-        event: tuple[float, float, float, float],
-        **kwargs
-    ) -> PyGData:
-        pass

@@ -186,11 +186,3 @@ class EGSST(BaseModel):
         transformed = filter_connected_subgraphs(transformed, min_nodes = min_nodes_subgraph)
 
         return transformed
-
-    def graph_update(
-        self,
-        x: torch_geometric.data.Data,
-        event: tuple[float, float, float, float],
-        **kwargs
-    ) -> torch_geometric.data.Data:
-        raise NotImplementedError
