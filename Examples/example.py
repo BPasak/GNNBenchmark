@@ -15,8 +15,8 @@ from src.utils.resultsVisualization import plot_with_moving_mean
 
 ## NCars
 dataset_name = "NCars"
-dataset_path = r'/home/benio/Documents/Datasets/NCars'
-# dataset_path = r"D:\Uniwersytet\GNNBenchmarking\Datasets\NCars\Prophesee_Dataset_n_cars"
+# dataset_path = r'/home/benio/Documents/Datasets/NCars'
+dataset_path = r"D:\Uniwersytet\GNNBenchmarking\Datasets\NCars\Prophesee_Dataset_n_cars"
 # dataset_path = r'/Users/mielgeraats/Documents/Master Artificial Intelligence/Master Project 1/Datasets/Prophesee_Dataset_n_cars'
 
 ## NCaltech
@@ -25,12 +25,13 @@ dataset_path = r'/home/benio/Documents/Datasets/NCars'
 # dataset_path = r"/Users/mielgeraats/Documents/Master Artificial Intelligence/Master Project 1/Datasets/N-Caltech101"
 
 # model_name = "AEGNN"
-model_name = "graph_res"
+# model_name = "graph_res"
+model_name = "EGSST"
 
 ## Training Parameters
-epochs = 100
+epochs = 500
 batch_size = 8
-lr = 5e-4
+lr = 4e-3
 
 # Output Directory
 output_dir = Path(f"../Results/{model_name}_on_{dataset_name}")
@@ -95,6 +96,26 @@ elif model_name == "graph_res":
         radius=3.0,
         max_neighbors=16
     )
+elif model_name == "EGSST":
+    from Models.EGSST.EGSST import EGSST
+
+    model: EGSST = EGSST(
+        dataset_information = dataset.get_info(),
+        detection_head_config = "",
+        task = "cls"
+    )
+
+    def transform_graph(graph):
+        graph.x = graph.x[:10000, :]
+        graph.pos = graph.pos[:10000, :]
+        graph = model.data_transform(graph, beta = 0.0001, radius = 3., min_nodes_subgraph = 1000)
+
+        if graph is None or graph.pos is None:
+            return None
+
+        return graph
+
+    data_transform = transform_graph
 else:
     raise ValueError(f"Model {model_name} not implemented.")
 
@@ -116,10 +137,10 @@ model_tester = ModelTester(
     model = model
 )
 
-model_tester.test_model_performance(
-    data = [dataset.get_mode_data('training', i) for i in range(100)],
-    batch_sizes = [1,2,4,8],
-)
+# model_tester.test_model_performance(
+#     data = [dataset.get_mode_data('training', i) for i in range(100)],
+#     batch_sizes = [1,2,4,8],
+# )
 
 # Model Training Initialization
 training_set = BatchManager(
@@ -129,7 +150,7 @@ training_set = BatchManager(
 )
 
 optimizer = AdamW(model.parameters(), lr=lr, weight_decay=1e-7)
-scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=100, cooldown = 25)
+scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=50, cooldown = 25)
 loss_fn = CrossEntropyLoss()
 
 classes = dataset.get_info().classes
