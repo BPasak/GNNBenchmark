@@ -1,5 +1,5 @@
 dataset:
-  current_dataset: ncaltech
+  current_dataset: gen1
 
 rtdetr:
   uniform:
@@ -11,7 +11,7 @@ rtdetr:
     #eval_spatial_size=None
   hybrid_encoder:
   decoder:
-    num_classes: 102
+    num_classes: 2
   matcher:
     weight_dict:
       cost_class: 0.5
@@ -22,7 +22,7 @@ rtdetr:
     #alpha=0.25
     #gamma=2.0
   criterion:
-    num_classes: 101
+    num_classes: 1
     weight_dict:
       loss_bbox: 1.0
       loss_giou: 1.0
@@ -30,8 +30,9 @@ rtdetr:
     losses:
       [boxes, labels]
   postprocess:
-    num_classes: 102
+    num_classes: 2
     use_focal_loss: False
+    num_top_queries: 5
     use_nms: False
   coco_eval:
     use_coco_eval:

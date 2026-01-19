@@ -65,3 +65,23 @@ def filter_connected_subgraphs(data: Data, min_nodes: int) -> Data:
     retained_vertices = np.concatenate(retained_vertices)
 
     return data.subgraph(torch.Tensor(retained_vertices).int())
+
+@torch.no_grad()
+def build_targets(batch_of_graphs, num_classes, device = "cpu"):
+    targets = []
+    for i in range(batch_of_graphs.num_graphs):
+        graph_data = batch_of_graphs.get_example(i)
+        targets.append(graph_data.bbox[None, :, :])
+
+    largest_size = 0
+    for target in targets:
+        largest_size = max(largest_size, target.shape[1])
+
+    # padding the targets with boxes of classes "no object"
+    for idx, target in enumerate(targets):
+        size = target.shape[1]
+        targets[idx] = torch.concat([target, torch.zeros((1, largest_size - size, 5)).to(device)], dim = 1)
+        if size < largest_size:
+            targets[idx][:, size + 1:, 0] = num_classes
+
+    return torch.concat(targets).to(device)

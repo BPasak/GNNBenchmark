@@ -1,43 +1,40 @@
 import torch
 import torch.nn as nn
 import torch_geometric
-from torch_geometric.data import Data, Batch as PyGBatch
-from torch_geometric.nn import GCNConv
+from torch_geometric.data import Batch as PyGBatch, Data
+from torch_geometric.nn import GCNConv, radius_graph
 from torch_scatter import scatter_max
-from torch_geometric.nn import radius_graph
 
+import Datasets.base
 from External.EGSST_PAPER.detector.efvit.efvit_backbone import EfficientViTLargeBackbone
 from Models.base import BaseModel
 from Models.EGSST.Components import EnchancedCNN
-from Models.utils import filter_connected_subgraphs, normalize_time, radius_graph_pytorch
+from Models.utils import build_targets, filter_connected_subgraphs, normalize_time
 
 
 class EGSST(BaseModel):
 
     def __init__(
         self, *,
-        gcn_count: int,
-        target_size: tuple[int, int],
-        time_steps: int = 1,
+        dataset_information: Datasets.base.DatasetInformation,
         detection_head_config: str,
-        YOLOX: bool = False,
+        gcn_count: int = 3,
+        time_steps: int = 1,
         Ecnn_flag: bool = False,
         ti_flag: bool = False,
-        task: str = "det",          # "det" = detection (current), "cls" = classification
-        num_classes: int = 101,     # for N-Caltech
+        task: str = "det",          # "det" = detection, "cls" = classification
     ):
 
         super().__init__()
         self.gcn_count: int = gcn_count
-        self.target_size: tuple[int, int] = target_size
+        self.target_size: tuple[int, int] = dataset_information.image_size
 
         self.detection_head_config: str = detection_head_config
-        self.YOLOX: bool = YOLOX
         self.Ecnn_flag: bool = Ecnn_flag
         self.ti_flag: bool = ti_flag
 
         self.task: str = task
-        self.num_classes: int = num_classes
+        self.num_classes: int = len(dataset_information.classes)
 
 
         self.GCNs = torch.nn.ModuleList()
@@ -47,7 +44,7 @@ class EGSST(BaseModel):
 
         self.ECNN = None
         if self.Ecnn_flag:
-            self.ECNN = EnchancedCNN(channels=32, target_size=target_size)
+            self.ECNN = EnchancedCNN(channels=32, target_size=self.target_size)
 
         self.MSLViT: EfficientViTLargeBackbone = EfficientViTLargeBackbone(
             width_list=[32, 64, 64, 128, 256],
@@ -58,14 +55,10 @@ class EGSST(BaseModel):
 
         self.detection_head = None
         if self.task == "det":
-            if self.YOLOX:
-                # TODO: FIND EXTERNAL IMPLEMENTATION
-                raise NotImplementedError
-            else:
-                from External.EGSST_PAPER.detector.rtdetr_header import RTDETRHead
-                self.detection_head = RTDETRHead(
-                    detection_head_config
-                )
+            from External.EGSST_PAPER.detector.rtdetr_header import RTDETRHead
+            self.detection_head = RTDETRHead(
+                detection_head_config
+            )
         else:
             # Classification head: global average pool + linear classifier
             self.global_pool = nn.AdaptiveAvgPool2d((1, 1))
@@ -113,8 +106,11 @@ class EGSST(BaseModel):
             return next(reversed(vit_out.values()))
         raise TypeError(f"Unexpected backbone output type: {type(vit_out)}")
 
-
     def forward(self, x: PyGBatch, **kwargs) -> torch.Tensor:
+        targets = None
+        if self.task == "det":
+            targets = build_targets(x, self.num_classes, device = x.x.device)
+
         graphs = []
         for graph in range(x.num_graphs):
             graph = x.get_example(graph)
@@ -142,8 +138,10 @@ class EGSST(BaseModel):
             pooled = self.global_pool(feats)            # [B, C, 1, 1]
             logits = self.cls_proj(pooled.flatten(1))   # [B, num_classes]
             return logits
+        elif self.task == "det":
+            return self.detection_head(vit_out, targets=targets)
         else:
-            return self.detection_head(vit_out, targets=kwargs.get("targets", None))
+            raise ValueError(f"Unexpected task: {self.task}")
 
     def data_transform(
         self,
@@ -166,11 +164,3 @@ class EGSST(BaseModel):
         transformed = filter_connected_subgraphs(transformed, min_nodes = min_nodes_subgraph)
 
         return transformed
-
-    def graph_update(
-        self,
-        x: torch_geometric.data.Data,
-        event: tuple[float, float, float, float],
-        **kwargs
-    ) -> torch_geometric.data.Data:
-        raise NotImplementedError

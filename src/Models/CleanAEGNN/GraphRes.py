@@ -104,11 +104,3 @@ class GraphRes(BaseModel):
         edge_attr = Cartesian(cat = False, max_value = 10.0)
         x.edge_attr = edge_attr(x).edge_attr
         return x
-
-    def graph_update(
-        self,
-        x: PyGData,
-        event: tuple[float, float, float, float],
-        **kwargs
-    ) -> PyGData:
-        pass

@@ -153,14 +153,23 @@ class NCaltech(Dataset):
 
                 # --- Process annotation bin ---
                 bbox, obj_contour = self.process_annotation_bin(anno_path)
+
+                x_min, x_max = bbox[:, 0].min(), bbox[:, 0].max()
+                y_min, y_max = bbox[:, 1].min(), bbox[:, 1].max()
+
+                x_center, y_center = (x_min + x_max) / 2, (y_min + y_max) / 2
+                w, h = x_max - x_min, y_max - y_min
+
+                x_center_norm, y_center_norm = x_center / self.get_info().image_size[0], y_center / self.get_info().image_size[1]
+                w_norm, h_norm = w / self.get_info().image_size[0], h / self.get_info().image_size[1]
                
                 # Get class index for the label
                 class_idx = self.get_info().classes.index(folder_name)
 
+                bbox = torch.tensor([class_idx, x_center_norm, y_center_norm, w_norm, h_norm])[None, :]
+
                 # --- Create Data object ---
-                data = PyGData(x=x, pos=pos, label=folder_name, y=class_idx)
-                data.bbox = bbox
-                data.obj_contour = obj_contour
+                data = PyGData(x=x, pos=pos, label=folder_name, y=class_idx, bbox = bbox, obj_contour = obj_contour)
                 
                 if self.pre_filter and not self.pre_filter(data):
                     continue
