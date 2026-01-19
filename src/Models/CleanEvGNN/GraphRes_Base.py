@@ -557,23 +557,12 @@ class GraphRes(BaseModel):
             beta: float = 0.5e-5, radius: float = 3.0,
             max_neighbors: int = 32, **kwargs
     ) -> PyGData:
-
-        # Transform polarity from {-1,1} to {0,1}
         x.x = torch.where(x.x == -1., 0., x.x)
 
-        # ✅ NEU: Überspringe das Zeitfenster
-        # (Deine Events stammen bereits aus einem kurzen Zeitbereich)
-
-        # Clampe räumliche Koordinaten
-        x.pos[:, 0] = torch.clamp(x.pos[:, 0], 0, self.model.input_shape[1] - 1)
-        x.pos[:, 1] = torch.clamp(x.pos[:, 1], 0, self.model.input_shape[0] - 1)
 
         x = sub_sampling(x, n_samples=n_samples, sub_sample=sampling)
-
-        # Zeit-Normalisierung
         x.pos[:, 2] = normalize_time(x.pos[:, 2], beta=beta)
 
-        # Graph-Konstruktion
         x.edge_index = radius_graph(x.pos, r=radius, max_num_neighbors=max_neighbors)
         edge_attr = Cartesian(cat=False, max_value=10.0)
         x.edge_attr = edge_attr(x).edge_attr
