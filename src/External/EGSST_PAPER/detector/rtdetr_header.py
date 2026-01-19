@@ -8,6 +8,7 @@ import math
 
 from omegaconf import OmegaConf
 
+from Datasets.gen1 import Gen1
 from Datasets.ncaltech101 import NCaltech
 from .rtdetr_head.rtdetr_converter import convert_yolo_batch_to_targets_format, move_to_device, to_feats_list, convert_yolo_batch_to_coco_format
 from .rtdetr_head.rtdetr_hybrid_encoder import HybridEncoder
@@ -67,7 +68,7 @@ class RTDETRHead(nn.Module):
         img_height = 240 if self.dataset_name=='gen1' else 720
 
         coco_targets = convert_yolo_batch_to_coco_format(tgt_tensor, img_width=scale_img_width, img_height=img_height, labelmap=classes)
-        torch.save(coco_targets, "/home/catlab/py_code/gt4dvs/save_dir/processing/coco_targets.pt")
+        # torch.save(coco_targets, "/home/catlab/py_code/gt4dvs/save_dir/processing/coco_targets.pt")
         # iou_types = ('bbox', )
         iou_types = self.postprocess.iou_types # ('bbox', )
         coco_evaluator = CocoEvaluator(coco_targets, iou_types)
@@ -77,7 +78,7 @@ class RTDETRHead(nn.Module):
         for img_id in res:
             res[img_id]['labels'] += 1 # ******** from 0,1 to 1,2
 
-        torch.save(res, "/home/catlab/py_code/gt4dvs/save_dir/processing/res.pt")
+        # torch.save(res, "/home/catlab/py_code/gt4dvs/save_dir/processing/res.pt")
         
         with open(os.devnull, 'w') as f, contextlib.redirect_stdout(f):
             if coco_evaluator is not None:
@@ -90,7 +91,7 @@ class RTDETRHead(nn.Module):
                 coco_evaluator.accumulate()
                 coco_evaluator.summarize()
 
-        torch.save(coco_evaluator.coco_eval, "/home/catlab/py_code/gt4dvs/save_dir/processing/coco_evaluator_coco_eval.pt")
+        # torch.save(coco_evaluator.coco_eval, "/home/catlab/py_code/gt4dvs/save_dir/processing/coco_evaluator_coco_eval.pt")
         # stats = {}
         # stats = {k: meter.global_avg for k, meter in metric_logger.meters.items()}
         out_keys = ('AP', 'AP_50', 'AP_75', 'AP_S', 'AP_M', 'AP_L', 'AR_1', 'AR_10', 'AR_100', 'AR_S', 'AR_M', 'AR_L')
@@ -108,6 +109,8 @@ class RTDETRHead(nn.Module):
     def forward(self, feats_dict, targets=None):
         if self.dataset_name == "ncaltech":
             dataset_info = NCaltech.get_info()
+        elif self.dataset_name in {'gen1', 'gen4'}:
+            dataset_info = Gen1.get_info()
         else:
             raise ValueError
 
@@ -121,12 +124,7 @@ class RTDETRHead(nn.Module):
         
         if self.training:
             return sum_loss, loss_dict
-        
-        if self.use_coco_eval and self.training==False:
+        else:
             orig_target_sizes = torch.stack([t["orig_size"] for t in target_format_lbl], dim=0)
-            torch.save(orig_target_sizes, "/home/catlab/py_code/gt4dvs/save_dir/processing/orig_target_sizes.pt")
             post_results = self.postprocess(decoder_outputs, orig_target_sizes) # xyxy
-            out_dict = self.coco_eval(targets, post_results)
-            return out_dict
-
-
+            return post_results

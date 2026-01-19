@@ -43,17 +43,17 @@ class RTDETRPostProcessor(nn.Module):
         logits, boxes = outputs['pred_logits'], outputs['pred_boxes']
         # orig_target_sizes = torch.stack([t["orig_size"] for t in targets], dim=0)        
 
-        torch.save(boxes, "/home/catlab/py_code/gt4dvs/save_dir/processing/boxes_cxcywh_normed.pt")
+        # torch.save(boxes, "/home/catlab/py_code/gt4dvs/save_dir/processing/boxes_cxcywh_normed.pt")
         
         bbox_pred = torchvision.ops.box_convert(boxes, in_fmt='cxcywh', out_fmt='xyxy')
-        torch.save(bbox_pred, "/home/catlab/py_code/gt4dvs/save_dir/processing/boxes_xyxy_normed.pt")
+        # torch.save(bbox_pred, "/home/catlab/py_code/gt4dvs/save_dir/processing/boxes_xyxy_normed.pt")
         
         scale_img_w, img_h = orig_target_sizes[0]
-        assert scale_img_w == img_h, "scale_img_w and img_h must be equal"
+        # assert scale_img_w == img_h, "scale_img_w and img_h must be equal"
         
         bbox_pred *= orig_target_sizes.repeat(1, 2).unsqueeze(1)
         # bbox_pred = bbox_pred.clamp(min=0, max=img_h-1)
-        torch.save(bbox_pred, "/home/catlab/py_code/gt4dvs/save_dir/processing/boxes_xyxy.pt")
+        # torch.save(bbox_pred, "/home/catlab/py_code/gt4dvs/save_dir/processing/boxes_xyxy.pt")
 
         if self.use_focal_loss:
             scores = F.sigmoid(logits)
@@ -63,7 +63,7 @@ class RTDETRPostProcessor(nn.Module):
             boxes = bbox_pred.gather(dim=1, index=index.unsqueeze(-1).repeat(1, 1, bbox_pred.shape[-1]))
             
         else:
-            scores = F.softmax(logits)[:, :, :-1]
+            scores = F.softmax(logits, dim = -1)[:, :, :-1]
             scores, labels = scores.max(dim=-1)
             if scores.shape[1] > self.num_top_queries:
                 scores, index = torch.topk(scores, self.num_top_queries, dim=-1)
@@ -101,7 +101,7 @@ class RTDETRPostProcessor(nn.Module):
 
             result = dict(labels=flt_lab, boxes=flt_box, scores=flt_sco)
             results.append(result)
-        torch.save(results, "/home/catlab/py_code/gt4dvs/save_dir/processing/results.pt")
+        # torch.save(results, "/home/catlab/py_code/gt4dvs/save_dir/processing/results.pt")
         
         return results
 
