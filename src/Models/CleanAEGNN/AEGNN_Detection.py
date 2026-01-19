@@ -5,9 +5,14 @@ from typing import Tuple
 import torch
 from torch_geometric.data import Batch as PyGBatch
 
+from External.EGSST_PAPER.detector.rtdetr_head.rtdetr_converter import convert_yolo_batch_to_targets_format, \
+    move_to_device
+from External.EGSST_PAPER.detector.rtdetr_head.rtdetr_matcher import HungarianMatcher
+from utils.bbox_utils import loss_boxes, loss_labels
 from utils.bounding_box import crop_to_frame, non_max_suppression
 from utils.yolo import yolo_grid
 from .GraphRes import GraphRes
+from ..utils import build_targets
 
 
 class AEGNN_Detection(GraphRes):
@@ -18,7 +23,7 @@ class AEGNN_Detection(GraphRes):
         pooling_size=(16, 12), cell_map_shape = (8, 6),
         bias: bool = False, root_weight: bool = False
     ):
-
+        self.input_shape = torch.tensor(input_shape, dtype = torch.float)
         self.num_classes = num_classes
         self.num_bounding_boxes = num_bounding_boxes
         self.cell_map_shape = cell_map_shape
@@ -35,8 +40,22 @@ class AEGNN_Detection(GraphRes):
             num_outputs = num_outputs, pooling_size = pooling_size,
             bias = bias, root_weight = root_weight,
         )
+
+        self.matcher = HungarianMatcher(weight_dict={'cost_class': 1., 'cost_bbox': 1., 'cost_giou': 1.})
         
-    def forward(self, data: PyGBatch, **kwargs) -> torch.Tensor:
+    def forward(self, data: PyGBatch, **kwargs) -> dict[str, torch.Tensor] | Tuple[torch.Tensor, dict[str, torch.Tensor]]:
+
+        target_format_lbl = None
+        if self.training:
+            targets = build_targets(data, self.num_classes, device = data.x.device)
+            scale_img_width, img_height, _ = self.input_shape
+            target_format_lbl = convert_yolo_batch_to_targets_format(
+                targets,
+                img_width = scale_img_width,
+                img_height = img_height,
+            )
+            target_format_lbl = move_to_device(target_format_lbl, data.x.device)
+
         out = super(AEGNN_Detection, self).forward(data, **kwargs)
         out = out.view(-1, *self.cell_map_shape, self.num_outputs_per_cell)
         parsed_out = self.parse_output(out)
@@ -56,7 +75,18 @@ class AEGNN_Detection(GraphRes):
             ).reshape(center_x.shape[0], -1, 4),
         }
 
-        return out_dict
+        if not self.training:
+            return out_dict
+
+        matches = self.matcher(out_dict, target_format_lbl)
+
+        losses = loss_boxes(out_dict, target_format_lbl, matches, data.num_graphs)
+        classification_loss = loss_labels(out_dict, target_format_lbl, matches, self.num_classes)
+
+        losses.update(classification_loss)
+
+        total_loss = losses["loss_bbox"] + losses["loss_giou"] + losses["loss_ce"]
+        return total_loss, losses
 
     ###############################################################################################
     # Parsing #####################################################################################

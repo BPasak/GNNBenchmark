@@ -9,7 +9,7 @@ import Datasets.base
 from External.EGSST_PAPER.detector.efvit.efvit_backbone import EfficientViTLargeBackbone
 from Models.base import BaseModel
 from Models.EGSST.Components import EnchancedCNN
-from Models.utils import filter_connected_subgraphs, normalize_time
+from Models.utils import build_targets, filter_connected_subgraphs, normalize_time
 
 
 class EGSST(BaseModel):
@@ -106,32 +106,10 @@ class EGSST(BaseModel):
             return next(reversed(vit_out.values()))
         raise TypeError(f"Unexpected backbone output type: {type(vit_out)}")
 
-    @torch.no_grad()
-    def _build_targets(self, batch_of_graphs):
-        device = next(self.parameters()).device
-
-        targets = []
-        for i in range(batch_of_graphs.num_graphs):
-            graph_data = batch_of_graphs.get_example(i)
-            targets.append(graph_data.bbox[None, :, :])
-
-        largest_size = 0
-        for target in targets:
-            largest_size = max(largest_size, target.shape[1])
-
-        # padding the targets with boxes of classes "no object"
-        for idx, target in enumerate(targets):
-            size = target.shape[1]
-            targets[idx] = torch.concat([target, torch.zeros((1, largest_size - size, 5)).to(device)], dim = 1)
-            if size < largest_size:
-                targets[idx][:, size + 1:, 0] = self.num_classes
-
-        return torch.concat(targets).to(device)
-
     def forward(self, x: PyGBatch, **kwargs) -> torch.Tensor:
         targets = None
         if self.task == "det":
-            targets = self._build_targets(x)
+            targets = build_targets(x, self.num_classes, device = x.x.device)
 
         graphs = []
         for graph in range(x.num_graphs):
