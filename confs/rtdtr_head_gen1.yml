@@ -32,7 +32,8 @@ rtdetr:
   postprocess:
     num_classes: 2
     use_focal_loss: False
-    num_top_queries: 2
+    num_top_queries: 5
+    use_nms: False
   coco_eval:
     use_coco_eval:
       False
