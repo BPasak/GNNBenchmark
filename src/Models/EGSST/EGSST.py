@@ -9,7 +9,7 @@ import Datasets.base
 from External.EGSST_PAPER.detector.efvit.efvit_backbone import EfficientViTLargeBackbone
 from Models.base import BaseModel
 from Models.EGSST.Components import EnchancedCNN
-from Models.utils import build_targets, filter_connected_subgraphs, normalize_time
+from Models.utils import build_targets, filter_connected_subgraphs, normalize_time, sub_sampling
 
 
 class EGSST(BaseModel):
@@ -149,12 +149,16 @@ class EGSST(BaseModel):
         beta: float = 0.00001,
         radius: float = 5,
         min_nodes_subgraph: int = 100,
+        n_samples: int = 10000,
+        sub_sample: bool = True,
     ) -> Data:
         """
         Convert raw events in the format of torch_geometric.data.Data -> torch_geometric.data.Data suitable for forward().
         Accepts:
           - torch_geometric.data.Data
         """
+
+        x = sub_sampling(x, n_samples = n_samples, sub_sample = sub_sample)
 
         transformed: Data = x.clone()
         transformed.pos[:, 2] = normalize_time(transformed.pos[:, 2], beta=beta)
