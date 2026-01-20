@@ -1,13 +1,12 @@
 """
-Comprehensive Metrics Evaluation Script for Trained EvGNN Models
+Asynchronous Metrics Evaluation Script for Trained EvGNN Models
 
-This script evaluates various performance metrics of trained models:
+This script evaluates asynchronous performance metrics of trained models:
 - Mean Average Precision (mAP)
-- Input computation latency
+- Per-event latency (async mode)
 - Model parameter count
-- Memory footprint (process-level)
-- Per-event latency and memory (async mode)
-- Graph construction latency (sync mode)
+- Power consumption (async + optional sync baseline)
+- Accuracy evolution over events
 
 Configuration: Edit the variables in the CONFIGURATION section below.
 """
@@ -18,7 +17,7 @@ Configuration: Edit the variables in the CONFIGURATION section below.
 
 # Model Configuration
 CONV_TYPE = "fuse"  # "ori_aegnn" or "fuse"
-MODEL_NAME = "evgnn_ncars_fuse.pth"  # Model filename
+MODEL_NAME = "evgnn_ncars_fuse_16.pth"  # Model filename
 MODEL_PATH = "../results/TrainedModels"  # Path to trained models
 
 # Dataset Configuration
@@ -29,7 +28,7 @@ DATASET_PATHS = {
 }
 
 # Evaluation Configuration
-NUM_SAMPLES = 500  # Number of test samples to evaluate
+NUM_SAMPLES = 10  # Number of test samples to evaluate
 EVENTS_PER_SAMPLE = 5000  # Number of events to process per sample for async metrics
 N_EVENTS_SAMPLE = 10000  # Number of events to sample per recording
 
@@ -52,7 +51,6 @@ DEVICE = "cpu"  # "cpu", "cuda", or "mps"
 import sys
 import os
 import time
-import psutil
 import gc
 
 
@@ -181,13 +179,6 @@ def count_parameters(model):
     }
 
 
-def get_memory_usage():
-    """Get current memory usage in MB"""
-    process = psutil.Process(os.getpid())
-    mem_info = process.memory_info()
-    return mem_info.rss / 1024 / 1024  # Convert to MB
-
-
 
 def transform_sample(sample, args, device):
     """Apply preprocessing transformations to a sample"""
@@ -211,23 +202,6 @@ def transform_sample(sample, args, device):
 
     return sample
 
-
-def measure_graph_construction_latency(sample, args, num_iterations=10):
-    """Measure graph construction latency"""
-    latencies = []
-
-    for _ in range(num_iterations):
-        start_time = time.perf_counter()
-        edge_index = radius_graph(sample.pos, r=args.radius, max_num_neighbors=args.max_num_neighbors)
-        end_time = time.perf_counter()
-        latencies.append((end_time - start_time) * 1000)  # Convert to ms
-
-    return {
-        'mean_ms': np.mean(latencies),
-        'std_ms': np.std(latencies),
-        'min_ms': np.min(latencies),
-        'max_ms': np.max(latencies)
-    }
 
 
 def compute_map(predictions, targets, num_classes):
@@ -256,104 +230,6 @@ def compute_map(predictions, targets, num_classes):
 
     return np.mean(precisions)
 
-
-def evaluate_synchronous_metrics(model, test_loader, num_samples, args, device):
-    """Evaluate synchronous inference metrics"""
-    print("\n" + "="*70)
-    print("SYNCHRONOUS EVALUATION METRICS")
-    print("="*70)
-
-    all_predictions = []
-    all_targets = []
-    inference_latencies = []
-    graph_construction_latencies = []
-    preprocessing_latencies = []
-    memory_footprints = []
-
-    gc.collect()
-    if device.type == 'cuda':
-        torch.cuda.empty_cache()
-
-    initial_memory = get_memory_usage()
-
-    for i in tqdm(range(num_samples), desc="Synchronous inference"):
-        sample = next(test_loader)
-
-        # Measure preprocessing time
-        preproc_start = time.perf_counter()
-        sample = transform_sample(sample, args, device)
-        preproc_end = time.perf_counter()
-        preprocessing_latencies.append((preproc_end - preproc_start) * 1000)
-
-        # Measure graph construction separately
-        graph_metrics = measure_graph_construction_latency(sample, args, num_iterations=1)
-        graph_construction_latencies.append(graph_metrics['mean_ms'])
-
-        target = sample.y.item()
-        all_targets.append(target)
-
-        # Measure inference time and memory
-        mem_before = get_memory_usage()
-
-        inf_start = time.perf_counter()
-        with torch.no_grad():
-            output = model(sample)
-        inf_end = time.perf_counter()
-
-        mem_after = get_memory_usage()
-
-        inference_latencies.append((inf_end - inf_start) * 1000)
-        memory_footprints.append(mem_after - mem_before)
-
-        pred = torch.argmax(output, dim=-1).item()
-        all_predictions.append(pred)
-
-    final_memory = get_memory_usage()
-
-    # Compute metrics
-    predictions = np.array(all_predictions)
-    targets = np.array(all_targets)
-    accuracy = (predictions == targets).mean()
-
-    # Get number of classes
-    num_classes = len(np.unique(targets))
-    map_score = compute_map(predictions, targets, num_classes)
-
-    metrics = {
-        'accuracy': float(accuracy),
-        'mean_average_precision': float(map_score),
-        'inference_latency_ms': {
-            'mean': float(np.mean(inference_latencies)),
-            'std': float(np.std(inference_latencies)),
-            'min': float(np.min(inference_latencies)),
-            'max': float(np.max(inference_latencies)),
-            'p50': float(np.percentile(inference_latencies, 50)),
-            'p95': float(np.percentile(inference_latencies, 95)),
-            'p99': float(np.percentile(inference_latencies, 99))
-        },
-        'preprocessing_latency_ms': {
-            'mean': float(np.mean(preprocessing_latencies)),
-            'std': float(np.std(preprocessing_latencies)),
-        },
-        'graph_construction_latency_ms': {
-            'mean': float(np.mean(graph_construction_latencies)),
-            'std': float(np.std(graph_construction_latencies)),
-        },
-        'memory_footprint_mb': {
-            'initial': float(initial_memory),
-            'final': float(final_memory),
-            'delta': float(final_memory - initial_memory),
-            'per_sample_mean': float(np.mean(memory_footprints))
-        }
-    }
-
-    print(f"\n✓ Synchronous metrics computed")
-    print(f"  Accuracy: {accuracy:.4f}")
-    print(f"  mAP: {map_score:.4f}")
-    print(f"  Mean inference latency: {metrics['inference_latency_ms']['mean']:.2f} ms")
-    print(f"  Mean graph construction: {metrics['graph_construction_latency_ms']['mean']:.2f} ms")
-
-    return metrics, predictions, targets
 
 
 def evaluate_asynchronous_metrics(model, test_loader, num_samples, args, device):
@@ -396,7 +272,6 @@ def evaluate_asynchronous_metrics(model, test_loader, num_samples, args, device)
     print("✓ Model converted")
 
     per_event_latencies = []
-    per_event_memory = []
     all_predictions = []
     all_targets = []
     successful_samples = 0
@@ -424,7 +299,6 @@ def evaluate_asynchronous_metrics(model, test_loader, num_samples, args, device)
             num_events = min(sample.num_nodes, events_to_process)
 
             sample_latencies = []
-            sample_memory = []
             sample_predictions = []  # Track predictions for each event in this sample
 
             with torch.no_grad():
@@ -440,17 +314,12 @@ def evaluate_asynchronous_metrics(model, test_loader, num_samples, args, device)
                         edge_attr=torch.empty((0, 3), dtype=torch.float)
                     ).to(device)
 
-                    # Measure per-event metrics
-                    mem_before = get_memory_usage()
-
+                    # Measure per-event latency
                     event_start = time.perf_counter()
                     output = async_model(event_new)
                     event_end = time.perf_counter()
 
-                    mem_after = get_memory_usage()
-
                     sample_latencies.append((event_end - event_start) * 1000)
-                    sample_memory.append(mem_after - mem_before)
 
                     # Store prediction at this event
                     pred = torch.argmax(output, dim=-1).item()
@@ -460,7 +329,6 @@ def evaluate_asynchronous_metrics(model, test_loader, num_samples, args, device)
                         all_predictions.append(pred)
 
             per_event_latencies.extend(sample_latencies)
-            per_event_memory.extend(sample_memory)
             predictions_per_event.append(sample_predictions)
             successful_samples += 1
 
@@ -525,10 +393,6 @@ def evaluate_asynchronous_metrics(model, test_loader, num_samples, args, device)
             'p95': float(np.percentile(per_event_latencies, 95)),
             'p99': float(np.percentile(per_event_latencies, 99))
         },
-        'per_event_memory_mb': {
-            'mean': float(np.mean(per_event_memory)),
-            'std': float(np.std(per_event_memory))
-        },
         'accuracy_evolution': accuracy_evolution,
         'max_events_processed': max_events
     }
@@ -545,10 +409,9 @@ def evaluate_asynchronous_metrics(model, test_loader, num_samples, args, device)
 
 
 def evaluate_power_consumption(model, dataset_obj, args, device, num_classes, image_size):
-    """Evaluate power consumption during inference using ModelTester.
+    """Evaluate power consumption during asynchronous inference using ModelTester.
 
-    Measures power consumption for both:
-    - Synchronous inference (batch processing)
+    Measures power consumption for:
     - Asynchronous inference (per-event processing)
 
     Args:
@@ -560,7 +423,6 @@ def evaluate_power_consumption(model, dataset_obj, args, device, num_classes, im
         image_size: Image size (needed to load fresh model for async)
 
     Note: Power measurement only works on Linux systems.
-    On other platforms, it will only measure model performance metrics.
     """
     print("\n" + "="*70)
     print("POWER CONSUMPTION EVALUATION")
@@ -581,6 +443,18 @@ def evaluate_power_consumption(model, dataset_obj, args, device, num_classes, im
     power_output_dir = os.path.join(args.output_dir, "power_consumption")
     os.makedirs(power_output_dir, exist_ok=True)
 
+    # Get some test data for power measurement
+    print("Preparing test data for power measurement...")
+    test_data = []
+    for i in range(min(100, args.num_samples)):
+        sample = dataset_obj.get_mode_data('test', i)
+        sample = transform_sample(sample, args, device)
+        test_data.append(sample)
+
+    # ========== SYNCHRONOUS POWER MEASUREMENT ==========
+    print("\n--- Synchronous Inference Power Measurement ---")
+    print("(Running synchronous inference for baseline comparison...)")
+
     # Initialize ModelTester for synchronous evaluation
     sync_power_dir = os.path.join(power_output_dir, "synchronous")
     os.makedirs(sync_power_dir, exist_ok=True)
@@ -589,26 +463,7 @@ def evaluate_power_consumption(model, dataset_obj, args, device, num_classes, im
         model=model
     )
 
-    # Get some test data for performance testing
-    print("Preparing test data for power measurement...")
-    test_data = []
-    for i in range(min(100, args.num_samples)):
-        sample = dataset_obj.get_mode_data('test', i)
-        sample = transform_sample(sample, args, device)
-        test_data.append(sample)
-
-    # Test model performance (graph construction and inference latency)
-    print("Testing model performance...")
-    model_tester_sync.test_model_performance(
-        data=test_data,
-        batch_sizes=[1, 2, 4, 8],
-        test_sizes=[25, 25, 25, 25]
-    )
-
-    # ========== SYNCHRONOUS POWER MEASUREMENT ==========
-    print("\n--- Synchronous Inference Power Measurement ---")
-    print("(Running 50 synchronous inference iterations...)")
-
+    # Measure power during synchronous inference (50 iterations for baseline)
     model.eval()
     with model_tester_sync:
         with torch.no_grad():
@@ -709,7 +564,7 @@ def evaluate_power_consumption(model, dataset_obj, args, device, num_classes, im
         except Exception as e:
             print(f"⚠️  Could not summarize async power consumption: {e}")
 
-    # Combine results
+    # Return results with both sync and async power metrics
     power_metrics = {
         'synchronous': sync_power_metrics,
         'asynchronous': async_power_metrics,
@@ -728,7 +583,7 @@ def evaluate_power_consumption(model, dataset_obj, args, device, num_classes, im
     return power_metrics
 
 
-def save_results(args, sync_metrics, async_metrics, param_metrics, power_metrics=None):
+def save_results(args, async_metrics, param_metrics, power_metrics=None):
     """Save all metrics to disk"""
     print("\n" + "="*70)
     print("SAVING RESULTS")
@@ -747,7 +602,6 @@ def save_results(args, sync_metrics, async_metrics, param_metrics, power_metrics
         'num_samples': args.num_samples,
         'device': str(args.device),
         'parameters': param_metrics,
-        'synchronous': sync_metrics,
         'asynchronous': async_metrics,
         'power_consumption': power_metrics,
         'configuration': {
@@ -770,7 +624,7 @@ def save_results(args, sync_metrics, async_metrics, param_metrics, power_metrics
     txt_path = os.path.join(args.output_dir, f"{base_name}_metrics.txt")
     with open(txt_path, 'w') as f:
         f.write("="*70 + "\n")
-        f.write("COMPREHENSIVE METRICS EVALUATION\n")
+        f.write("ASYNCHRONOUS METRICS EVALUATION\n")
         f.write("="*70 + "\n\n")
         f.write(f"Model: {args.model}\n")
         f.write(f"Dataset: {args.dataset}\n")
@@ -781,138 +635,34 @@ def save_results(args, sync_metrics, async_metrics, param_metrics, power_metrics
         f.write(f"Total parameters: {param_metrics['total_parameters']:,} ({param_metrics['total_parameters_millions']:.2f}M)\n")
         f.write(f"Trainable parameters: {param_metrics['trainable_parameters']:,} ({param_metrics['trainable_parameters_millions']:.2f}M)\n\n")
 
-        f.write("SYNCHRONOUS INFERENCE\n")
-        f.write("-"*70 + "\n")
-        f.write(f"Accuracy: {sync_metrics['accuracy']:.4f}\n")
-        f.write(f"Mean Average Precision: {sync_metrics['mean_average_precision']:.4f}\n")
-        f.write(f"Inference latency (mean): {sync_metrics['inference_latency_ms']['mean']:.2f} ms\n")
-        f.write(f"Inference latency (std): {sync_metrics['inference_latency_ms']['std']:.2f} ms\n")
-        f.write(f"Inference latency (p95): {sync_metrics['inference_latency_ms']['p95']:.2f} ms\n")
-        f.write(f"Preprocessing latency: {sync_metrics['preprocessing_latency_ms']['mean']:.2f} ms\n")
-        f.write(f"Graph construction latency: {sync_metrics['graph_construction_latency_ms']['mean']:.2f} ms\n")
-        f.write(f"Memory footprint (delta): {sync_metrics['memory_footprint_mb']['delta']:.2f} MB\n\n")
-
         f.write("ASYNCHRONOUS PROCESSING\n")
         f.write("-"*70 + "\n")
         f.write(f"Accuracy: {async_metrics['accuracy']:.4f}\n")
         f.write(f"Mean Average Precision: {async_metrics['mean_average_precision']:.4f}\n")
         f.write(f"Per-event latency (mean): {async_metrics['per_event_latency_ms']['mean']:.4f} ms\n")
         f.write(f"Per-event latency (std): {async_metrics['per_event_latency_ms']['std']:.4f} ms\n")
-        f.write(f"Per-event latency (p95): {async_metrics['per_event_latency_ms']['p95']:.4f} ms\n")
-        f.write(f"Per-event memory (mean): {async_metrics['per_event_memory_mb']['mean']:.4f} MB\n")
+        f.write(f"Per-event latency (p95): {async_metrics['per_event_latency_ms']['p95']:.4f} ms\n\n")
+
+        if power_metrics:
+            f.write("POWER CONSUMPTION\n")
+            f.write("-"*70 + "\n")
+            if power_metrics.get('synchronous'):
+                f.write("Synchronous inference power metrics available in JSON output\n")
+            if power_metrics.get('asynchronous'):
+                f.write("Asynchronous inference power metrics available in JSON output\n")
 
     print(f"✓ Metrics text report saved to: {txt_path}")
 
     return base_name
 
 
-def visualize_results(args, base_name, sync_metrics, async_metrics):
-    """Generate visualization plots"""
+def visualize_accuracy_evolution(args, base_name, async_metrics):
+    """Generate accuracy evolution plot"""
     print("\n" + "="*70)
     print("GENERATING VISUALIZATIONS")
     print("="*70)
 
-    # Create main comparison figure
-    fig, axes = plt.subplots(2, 3, figsize=(18, 12))
-    fig.suptitle(f'Performance Metrics: {args.model} on {args.dataset}', fontsize=16, fontweight='bold')
-
-    # 1. Latency comparison
-    ax = axes[0, 0]
-    latencies = [
-        sync_metrics['inference_latency_ms']['mean'],
-        async_metrics['per_event_latency_ms']['mean']
-    ]
-    ax.bar(['Sync\n(per sample)', 'Async\n(per event)'], latencies, color=['#3498db', '#e74c3c'])
-    ax.set_ylabel('Latency (ms)', fontsize=11)
-    ax.set_title('Inference Latency Comparison', fontsize=12, fontweight='bold')
-    ax.grid(axis='y', alpha=0.3)
-    for i, v in enumerate(latencies):
-        ax.text(i, v, f'{v:.2f}ms', ha='center', va='bottom', fontweight='bold')
-
-    # 2. Latency breakdown (sync)
-    ax = axes[0, 1]
-    breakdown = [
-        sync_metrics['preprocessing_latency_ms']['mean'],
-        sync_metrics['graph_construction_latency_ms']['mean'],
-        sync_metrics['inference_latency_ms']['mean']
-    ]
-    labels = ['Preprocessing', 'Graph Constr.', 'Inference']
-    colors = ['#9b59b6', '#f39c12', '#2ecc71']
-    ax.pie(breakdown, labels=labels, autopct='%1.1f%%', colors=colors, startangle=90)
-    ax.set_title('Sync Latency Breakdown', fontsize=12, fontweight='bold')
-
-    # 3. Memory comparison
-    ax = axes[0, 2]
-    memory = [
-        sync_metrics['memory_footprint_mb']['per_sample_mean'],
-        async_metrics['per_event_memory_mb']['mean']
-    ]
-    ax.bar(['Sync\n(per sample)', 'Async\n(per event)'], memory, color=['#3498db', '#e74c3c'])
-    ax.set_ylabel('Memory (MB)', fontsize=11)
-    ax.set_title('Memory Footprint Comparison', fontsize=12, fontweight='bold')
-    ax.grid(axis='y', alpha=0.3)
-    for i, v in enumerate(memory):
-        ax.text(i, v, f'{v:.3f}MB', ha='center', va='bottom', fontweight='bold')
-
-    # 4. Latency percentiles (sync)
-    ax = axes[1, 0]
-    percentiles = ['mean', 'p50', 'p95', 'p99']
-    values = [
-        sync_metrics['inference_latency_ms']['mean'],
-        sync_metrics['inference_latency_ms']['p50'],
-        sync_metrics['inference_latency_ms']['p95'],
-        sync_metrics['inference_latency_ms']['p99']
-    ]
-    ax.bar(percentiles, values, color='#3498db')
-    ax.set_ylabel('Latency (ms)', fontsize=11)
-    ax.set_title('Sync Latency Distribution', fontsize=12, fontweight='bold')
-    ax.grid(axis='y', alpha=0.3)
-    for i, v in enumerate(values):
-        ax.text(i, v, f'{v:.1f}', ha='center', va='bottom', fontweight='bold')
-
-    # 5. Accuracy and mAP
-    ax = axes[1, 1]
-    metrics_data = [
-        [sync_metrics['accuracy'], sync_metrics['mean_average_precision']],
-        [async_metrics['accuracy'], async_metrics['mean_average_precision']]
-    ]
-    x = np.arange(2)
-    width = 0.35
-    ax.bar(x - width/2, metrics_data[0], width, label='Sync', color='#3498db')
-    ax.bar(x + width/2, metrics_data[1], width, label='Async', color='#e74c3c')
-    ax.set_ylabel('Score', fontsize=11)
-    ax.set_title('Accuracy Metrics', fontsize=12, fontweight='bold')
-    ax.set_xticks(x)
-    ax.set_xticklabels(['Accuracy', 'mAP'])
-    ax.legend()
-    ax.grid(axis='y', alpha=0.3)
-    ax.set_ylim([0, 1])
-
-    # 6. Async latency percentiles
-    ax = axes[1, 2]
-    percentiles = ['mean', 'p50', 'p95', 'p99']
-    values = [
-        async_metrics['per_event_latency_ms']['mean'],
-        async_metrics['per_event_latency_ms']['p50'],
-        async_metrics['per_event_latency_ms']['p95'],
-        async_metrics['per_event_latency_ms']['p99']
-    ]
-    ax.bar(percentiles, values, color='#e74c3c')
-    ax.set_ylabel('Latency (ms)', fontsize=11)
-    ax.set_title('Async Latency Distribution', fontsize=12, fontweight='bold')
-    ax.grid(axis='y', alpha=0.3)
-    for i, v in enumerate(values):
-        ax.text(i, v, f'{v:.2f}', ha='center', va='bottom', fontweight='bold')
-
-    plt.tight_layout()
-
-    plot_path = os.path.join(args.output_dir, f"{base_name}_metrics_visualization.png")
-    plt.savefig(plot_path, dpi=300, bbox_inches='tight')
-    print(f"✓ Visualization saved to: {plot_path}")
-
-    plt.close()
-
-    # Create separate accuracy evolution plot (similar to reference image)
+    # Create accuracy evolution plot (similar to reference image)
     if 'accuracy_evolution' in async_metrics:
         fig, ax = plt.subplots(figsize=(10, 6))
 
@@ -960,8 +710,32 @@ def visualize_results(args, base_name, sync_metrics, async_metrics):
 
         plt.close()
 
+    # Create latency distribution plot
+    fig, ax = plt.subplots(figsize=(10, 6))
 
-def print_summary(sync_metrics, async_metrics, param_metrics):
+    percentiles = ['mean', 'p50', 'p95', 'p99']
+    values = [
+        async_metrics['per_event_latency_ms']['mean'],
+        async_metrics['per_event_latency_ms']['p50'],
+        async_metrics['per_event_latency_ms']['p95'],
+        async_metrics['per_event_latency_ms']['p99']
+    ]
+    ax.bar(percentiles, values, color='#e74c3c')
+    ax.set_ylabel('Latency (ms)', fontsize=11)
+    ax.set_title('Async Per-Event Latency Distribution', fontsize=12, fontweight='bold')
+    ax.grid(axis='y', alpha=0.3)
+    for i, v in enumerate(values):
+        ax.text(i, v, f'{v:.2f}', ha='center', va='bottom', fontweight='bold')
+
+    plt.tight_layout()
+    metrics_plot_path = os.path.join(args.output_dir, f"{base_name}_metrics_visualization.png")
+    plt.savefig(metrics_plot_path, dpi=300, bbox_inches='tight')
+    print(f"✓ Metrics visualization saved to: {metrics_plot_path}")
+
+    plt.close()
+
+
+def print_summary(async_metrics, param_metrics):
     """Print summary of all metrics"""
     print("\n" + "="*70)
     print("METRICS SUMMARY")
@@ -971,13 +745,6 @@ def print_summary(sync_metrics, async_metrics, param_metrics):
     print(f"  Total: {param_metrics['total_parameters']:,} ({param_metrics['total_parameters_millions']:.2f}M)")
     print(f"  Trainable: {param_metrics['trainable_parameters']:,} ({param_metrics['trainable_parameters_millions']:.2f}M)")
 
-    print("\n⚡ SYNCHRONOUS INFERENCE")
-    print(f"  Accuracy: {sync_metrics['accuracy']:.4f} ({sync_metrics['accuracy']*100:.2f}%)")
-    print(f"  mAP: {sync_metrics['mean_average_precision']:.4f}")
-    print(f"  Inference latency: {sync_metrics['inference_latency_ms']['mean']:.2f} ± {sync_metrics['inference_latency_ms']['std']:.2f} ms")
-    print(f"  Graph construction: {sync_metrics['graph_construction_latency_ms']['mean']:.2f} ms")
-    print(f"  Memory footprint: {sync_metrics['memory_footprint_mb']['delta']:.2f} MB")
-
     print("\n🔄 ASYNCHRONOUS PROCESSING")
     print(f"  Accuracy: {async_metrics['accuracy']:.4f} ({async_metrics['accuracy']*100:.2f}%)")
     print(f"  mAP: {async_metrics['mean_average_precision']:.4f}")
@@ -986,7 +753,6 @@ def print_summary(sync_metrics, async_metrics, param_metrics):
         if async_metrics['failed_samples'] > 0:
             print(f"  ⚠️  Failed samples: {async_metrics['failed_samples']}")
     print(f"  Per-event latency: {async_metrics['per_event_latency_ms']['mean']:.4f} ± {async_metrics['per_event_latency_ms']['std']:.4f} ms")
-    print(f"  Per-event memory: {async_metrics['per_event_memory_mb']['mean']:.4f} MB")
 
     print("\n" + "="*70)
 
@@ -1032,40 +798,33 @@ def main():
     print(f"Total parameters: {param_metrics['total_parameters']:,} ({param_metrics['total_parameters_millions']:.2f}M)")
     print(f"Trainable parameters: {param_metrics['trainable_parameters']:,} ({param_metrics['trainable_parameters_millions']:.2f}M)")
 
-    # Evaluate synchronous metrics
-    sync_metrics, sync_preds, sync_targets = evaluate_synchronous_metrics(
+    # Evaluate asynchronous metrics
+    async_metrics, async_preds, async_targets = evaluate_asynchronous_metrics(
         model, test_loader, num_samples, args, device
     )
 
-    # Reset data loader
+    # Reset data loader for power measurement
     test_loader = BatchManager(dataset=dataset_obj, batch_size=1, mode="test")
 
-    # Load a fresh model for async evaluation
+    # Evaluate power consumption
+    # Load a fresh model since async conversion modifies the model
     print("\n" + "="*70)
-    print("LOADING FRESH MODEL FOR ASYNC EVALUATION")
+    print("LOADING FRESH MODEL FOR POWER MEASUREMENT")
     print("="*70)
-    print("(Async conversion modifies the model, so loading a separate instance...)")
-    model_async = load_model(args, num_classes, image_size, device)
+    model_for_power = load_model(args, num_classes, image_size, device)
 
-    # Evaluate asynchronous metrics with the fresh model
-    async_metrics, async_preds, async_targets = evaluate_asynchronous_metrics(
-        model_async, test_loader, num_samples, args, device
-    )
-
-    # Evaluate power consumption with the ORIGINAL synchronous model
-    # (The original 'model' variable still has the synchronous forward method)
     power_metrics = evaluate_power_consumption(
-        model, dataset_obj, args, device, num_classes, image_size
+        model_for_power, dataset_obj, args, device, num_classes, image_size
     )
 
     # Save results
-    base_name = save_results(args, sync_metrics, async_metrics, param_metrics, power_metrics)
+    base_name = save_results(args, async_metrics, param_metrics, power_metrics)
 
     # Visualize
-    visualize_results(args, base_name, sync_metrics, async_metrics)
+    visualize_accuracy_evolution(args, base_name, async_metrics)
 
     # Print summary
-    print_summary(sync_metrics, async_metrics, param_metrics)
+    print_summary(async_metrics, param_metrics)
 
     print(f"\n✅ Evaluation complete! Results saved to: {args.output_dir}")
 
