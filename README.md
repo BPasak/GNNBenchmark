@@ -22,13 +22,10 @@ The repository is organized into the following directories:
 - **`training_scripts/`** - Jupyter notebooks and scripts for training models:
   - `Train_Recognition_Model.ipynb` - Training script for recognition tasks
   - `Train_Detection_Model.ipynb` - Training script for detection tasks
-  - `EVGNN_AEGNN_training.ipynb` - AEGNN-specific training notebook
+- **`testing_scripts/`** - Jupyter notebooks and scripts for testing and evaluation:
   - `Accuracy_Computation.ipynb` - Compute model accuracy
   - `Compute_mAP.ipynb` - Compute mean Average Precision
-- **`testing_scripts/`** - Jupyter notebooks and scripts for testing and evaluation:
-  - `EVGNN_AEGNN_async_test_comp.py` - Asynchronous model testing
   - `EvGNN_AEGNN_async_jpn.ipynb` - Asynchronous evaluation notebook
-  - `EVGNN_AEGNN_sync_test.ipynb` - Synchronous model testing
 
 ## Installation
 
@@ -71,9 +68,6 @@ jupyter notebook training_scripts/Train_Recognition_Model.ipynb
 
 # Detection model training
 jupyter notebook training_scripts/Train_Detection_Model.ipynb
-
-# AEGNN-specific training
-jupyter notebook training_scripts/EVGNN_AEGNN_training.ipynb
 ```
 
 ## Evaluation
@@ -82,10 +76,10 @@ Evaluate your trained models using:
 
 ```bash
 # For accuracy computation
-jupyter notebook training_scripts/Accuracy_Computation.ipynb
+jupyter notebook testing_scripts/Accuracy_Computation.ipynb
 
 # For mean Average Precision (mAP)
-jupyter notebook training_scripts/Compute_mAP.ipynb
+jupyter notebook testing_scripts/Compute_mAP.ipynb
 
 # For asynchronous model testing
 python testing_scripts/EVGNN_AEGNN_async_test_comp.py
