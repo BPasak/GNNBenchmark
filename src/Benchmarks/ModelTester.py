@@ -1,6 +1,7 @@
 import os
 import random
 import sys
+from contextlib import redirect_stdout
 from datetime import datetime
 from pathlib import Path
 
@@ -167,6 +168,13 @@ class ModelTester:
     def __exit__(self, exc_type, exc_val, exc_tb):
         if sys.platform == "linux":
             self.q.put(experiment.STOP_MESSAGE)
+
+            driver = parsers.JsonParser(str(self._get_power_consumption_path()))
+            exp_result = experiment.ExpResults(driver)
+
+            with open(str(self.results_dir_path / "power_consumption_summary.txt"), 'w') as f:
+                with redirect_stdout(f):
+                    exp_result.print()
 
     def _power_consumption_results_exist(self) -> bool:
         return os.path.exists(self._get_power_consumption_path() / "power_metrics.json")
