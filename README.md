@@ -41,7 +41,7 @@ conda env create --file=environment_windows.yaml
 conda activate GNNBenchmark
 ```
 
-As for measuring the power consumption it requires https://github.com/GreenAI-Uppa/AIPowerMete. Here are the commands required to install it (linux may be needed as the operating system???) :
+As for measuring the power consumption it requires https://github.com/GreenAI-Uppa/AIPowerMete. Here are the commands required to install it as an operating system Linux is required due to Linux specific drivers :
 
 ```bash
 git clone https://github.com/GreenAI-Uppa/AIPowerMeter
