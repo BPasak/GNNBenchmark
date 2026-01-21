@@ -1,6 +1,6 @@
 ##borrowed from AEGNN repo
 """Partly copied from rpg-asynet paper: https://github.com/uzh-rpg/rpg_asynet"""
-from typing import Tuple
+from typing import List, Tuple
 
 import torch
 from torch_geometric.data import Batch as PyGBatch
@@ -43,7 +43,7 @@ class AEGNN_Detection(GraphRes):
 
         self.matcher = HungarianMatcher(weight_dict={'cost_class': 1., 'cost_bbox': 1., 'cost_giou': 1.})
         
-    def forward(self, data: PyGBatch, **kwargs) -> dict[str, torch.Tensor] | Tuple[torch.Tensor, dict[str, torch.Tensor]]:
+    def forward(self, data: PyGBatch, **kwargs) -> dict[str, torch.Tensor] | Tuple[torch.Tensor, dict[str, torch.Tensor]] | List[dict[str, torch.Tensor]]:
 
         target_format_lbl = None
         if self.training:
@@ -76,7 +76,19 @@ class AEGNN_Detection(GraphRes):
         }
 
         if not self.training:
-            return out_dict
+            output = []
+            for i in range(data.num_graphs):
+                result = {}
+                probabilities = torch.softmax(out_dict["pred_logits"][i, :, :], dim=-1)
+                result["labels"] = torch.argmax(probabilities, dim=-1)
+                result["scores"] = torch.max(probabilities, dim=-1).values
+
+                boxes = out_dict["pred_boxes"][i, :, :]
+                boxes[:, 0] = boxes[:, 0] - (0.5 / self.cell_x_shift.shape[1])
+                boxes[:, 1] = boxes[:, 1] - (0.5 / self.cell_x_shift.shape[2])
+                result["boxes"] = boxes
+                output.append(result)
+            return output
 
         matches = self.matcher(out_dict, target_format_lbl)
 
