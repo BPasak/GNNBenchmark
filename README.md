@@ -1,6 +1,12 @@
 # When Events Meet Graphs: Evaluating Graph Neural Networks for Event-Based Vision with Object Classification
 
-This repository contains code from our 2022 CVPR paper [**AEGNN: Asynchronous Event-based Graph Neural Networks**](http://rpg.ifi.uzh.ch/docs/CVPR22_Schaefer.pdf) by Simon Schaefer*, [Daniel Gehrig*](https://danielgehrig18.github.io/), and [Davide Scaramuzza](http://rpg.ifi.uzh.ch/people_scaramuzza.html). 
+This repository is a benchmark implementation that replicates and compares Graph Neural Network approaches for event-based vision. It includes implementations based on three key papers:
+
+1. [**AEGNN: Asynchronous Event-based Graph Neural Networks**](http://rpg.ifi.uzh.ch/docs/CVPR22_Schaefer.pdf) (CVPR 2022) - Schaefer, Gehrig, and Scaramuzza
+2. [**Event-Vision meets Robotic Manipulation: A Learning Benchmark**](https://openreview.net/forum?id=cknAewsBhD&noteId=zboqDL2uxs) - OpenReview
+3. [**Bridging Event-based Vision and Robotics through Event-Guided Multimodal Fusion**](https://arxiv.org/abs/2404.19489) - arXiv
+
+The codebase supports flexible Graph Neural Network models that can be evaluated across multiple event-based vision benchmarks.
 
 ## File Structure
 
