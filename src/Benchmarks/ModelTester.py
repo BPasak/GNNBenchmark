@@ -1,6 +1,8 @@
+import json
 import os
 import random
 import sys
+import time
 from contextlib import redirect_stdout
 from datetime import datetime
 from pathlib import Path
@@ -154,7 +156,32 @@ class ModelTester:
         for batch_size, batch_list in tqdm(batches.items(), total = len(batches)):
             with open(self._performance_results_path(), 'a') as f:
                 f.write(f'\n Batch Size: {batch_size} - investigated on {len(batch_list)} batches\n')
+
+                batch_summary_path = self.results_dir_path / f"inference-{batch_size}_power_consumption"
+
+                driver = parsers.JsonParser(str(batch_summary_path))
+                exp = experiment.Experiment(driver)
+
+                self.p, self.q = exp.measure_yourself(period = 1, measurement_period = 1)
                 times = measure_model_runtime(self.model, batch_list, device = device)
+                time.sleep(2) # To ensure the power consumption measurement has enough time to be interpolated
+                self.q.put(experiment.STOP_MESSAGE)
+
+                if not (batch_summary_path / "metadata.json").exists():
+                    with open(batch_summary_path / "metadata.json", 'w') as file:
+                        json.dump(
+                            {
+                                "description": f"Power consumption for inference latency of batch size {batch_size}",
+                                "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                            },
+                            file
+                        )
+
+                exp_result = experiment.ExpResults(driver)
+
+                with open(str(self.results_dir_path / f"inference-{batch_size}_power_consumption_summary.txt"), 'w') as file:
+                    with redirect_stdout(file):
+                        exp_result.print()
 
                 f.write(f'   AVG | STD | MAX | MIN\n')
                 f.write(f'   {sum(times) / len(times):.2f} | {np.std(times):.2f} | {max(times):.2f} | {min(times):.2f}\n')
