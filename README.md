@@ -3,8 +3,8 @@
 This repository is a benchmark implementation that replicates and compares Graph Neural Network approaches for event-based vision. It includes implementations based on three key papers:
 
 1. [**AEGNN: Asynchronous Event-based Graph Neural Networks**](http://rpg.ifi.uzh.ch/docs/CVPR22_Schaefer.pdf) (CVPR 2022) - Schaefer, Gehrig, and Scaramuzza
-2. [**Event-Vision meets Robotic Manipulation: A Learning Benchmark**](https://openreview.net/forum?id=cknAewsBhD&noteId=zboqDL2uxs) - OpenReview
-3. [**Bridging Event-based Vision and Robotics through Event-Guided Multimodal Fusion**](https://arxiv.org/abs/2404.19489) - arXiv
+2. [**EGSST: Event-based Graph Spatiotemporal Sensitive Transformer for Object Detection**](https://neurips.cc/virtual/2024/poster/94394) (NeurIPS 2024) - Sheng Wu, Hang Sheng, Hui Feng and Bo Hu
+3. [**EvGNN: An Event-driven Graph Neural Network Accelerator for Edge Vision**](https://arxiv.org/abs/2404.19489) - (IEEE Transactions on Circuits and Systems for Artificial Intelligence) - Yufeng Yang, Adrian Kneip and Charlotte Frenkel 
 
 The codebase supports flexible Graph Neural Network models that can be evaluated across multiple event-based vision benchmarks.
 
@@ -45,14 +45,20 @@ git clone https://github.com/GreenAI-Uppa/AIPowerMeter
 pip install AIPowerMeter/
 ```
 
+#### Known Issues
+
+- When manually installing packages you might encounter a problem with `torch-scatter` and `torch-sparse`: "torch not found". In such a case once you install torch, you can try to install the package using the following command:
+
+```bash
+pip install torch-scatter --no-build-isolation
+```
+
 ## Datasets
 
 We evaluated our approach on three datasets:
 - [NCars](http://www.prophesee.ai/dataset-n-cars/)
 - [NCaltech101](https://www.garrickorchard.com/datasets/n-caltech101)
 - [Prophesee Gen1 Automotive](https://www.prophesee.ai/2020/01/24/prophesee-gen1-automotive-detection-dataset/)
-
-Download and extract the datasets. By default, they are assumed to be in `/data/storage/`. You can change this by setting the `AEGNN_DATA_DIR` environment variable.
 
 ### Data Preprocessing
 
@@ -87,8 +93,4 @@ python testing_scripts/EVGNN_AEGNN_async_test_comp.py
 
 ## Model Architecture
 
-The codebase supports flexible Graph Neural Network models that can be made asynchronous and sparse. Model configurations are stored in YAML files in the `confs/` directory.
-
-## Contributing
-
-If you spot any bugs or plan to contribute bug-fixes, please open an issue and discuss it with us.
+The codebase supports flexible Graph Neural Network models that can be made asynchronous and sparse. Tested model configurations for EGSST are stored in YAML files in the `confs/` directory.
